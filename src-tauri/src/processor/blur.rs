@@ -1,9 +1,9 @@
-use image::{DynamicImage, GenericImageView, Rgba, imageops}; // 🟢 移除了 ImageBuffer
+use image::{DynamicImage, GenericImageView, Rgba, imageops};
 use ab_glyph::{FontRef, PxScale};
+use std::time::Instant; // 🟢 引入计时器
 
 use crate::resources::BrandLogos;
 use crate::graphics;
-// 引入父模块公共工具
 use super::{clean_model_name, format_model_text};
 
 pub fn process(
@@ -16,13 +16,15 @@ pub fn process(
     shadow_intensity: f32,
     logos: &BrandLogos 
 ) -> DynamicImage {
+    let t0 = Instant::now();
     let (width, height) = img.dimensions();
     let border_size = (width as f32 * 0.08) as u32; 
     let bottom_extra = (border_size as f32 * 0.6) as u32; 
     let canvas_w = width + border_size * 2;
     let canvas_h = height + border_size * 2 + bottom_extra;
 
-    // 1. 模糊背景
+    // 1. 模糊背景 (性能热点)
+    let t_blur = Instant::now();
     let process_limit = 400u32; 
     let scale_factor_bg = (width.max(height) as f32 / process_limit as f32).max(1.0);
     let small_w = (canvas_w as f32 / scale_factor_bg) as u32;
@@ -31,8 +33,10 @@ pub fn process(
     let mut blurred = small_img.blur(30.0);
     imageops::colorops::brighten(&mut blurred, -180);
     let mut canvas = blurred.resize_exact(canvas_w, canvas_h, imageops::FilterType::Triangle).to_rgba8();
+    println!("  - [PERF] 高斯模糊背景生成: {:.2?}", t_blur.elapsed());
 
     // 2. 玻璃与阴影
+    let t_shadow = Instant::now();
     let glass_img = graphics::apply_rounded_glass_effect(img);
     let shadow_img = graphics::create_diffuse_shadow(glass_img.width(), glass_img.height(), border_size, shadow_intensity);
     
@@ -48,6 +52,7 @@ pub fn process(
     let overlay_x = border_size as i64 - border_thickness as i64;
     let overlay_y = border_size as i64 - border_thickness as i64;
     imageops::overlay(&mut canvas, &glass_img, overlay_x, overlay_y);
+    println!("  - [PERF] 阴影与玻璃特效合成: {:.2?}", t_shadow.elapsed());
 
     // 3. 文字布局参数
     let text_color = Rgba([255, 255, 255, 255]); 
@@ -64,7 +69,7 @@ pub fn process(
     let line1_y = (text_area_start_y + padding_top).round() as i32;
     let line2_y = (text_area_start_y + padding_top + font_size_model + line_gap).round() as i32;
 
-    // 4. 居中绘制机型 (Logo + 文本)
+    // 4. 居中绘制机型
     if !camera_model.is_empty() {
         if let Some(logo) = &logos.icon {
             let model_text = clean_model_name(camera_make, camera_model);
@@ -102,5 +107,6 @@ pub fn process(
         graphics::draw_text_high_quality(&mut canvas, sub_text_color, text_x, line2_y, scale_params, font, shooting_params, sub_weight);
     }
 
+    println!("  - [PERF] 高斯模糊模式-绘制阶段总耗时: {:.2?}", t0.elapsed());
     DynamicImage::ImageRgba8(canvas)
 }
