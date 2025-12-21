@@ -14,7 +14,7 @@ pub fn generate_shadow_grid() -> Result<String, String> {
     let canvas_h = 1500u32;
     let mut canvas = ImageBuffer::from_pixel(canvas_w, canvas_h, Rgba([255, 255, 255, 255]));
 
-    let font_data = include_bytes!("../assets/fonts/default.ttf").to_vec();
+    let font_data = include_bytes!("../assets/fonts/InterDisplay-Bold.otf").to_vec();
     let font = FontRef::try_from_slice(&font_data).map_err(|_| "字体加载失败")?;
 
     let rows = 3u32; // 显式声明为 u32
@@ -71,7 +71,7 @@ pub fn generate_weight_grid() -> Result<String, String> {
     let canvas_h = 1500u32;
     let mut canvas = ImageBuffer::from_pixel(canvas_w, canvas_h, Rgba([255, 255, 255, 255]));
 
-    let font_data = include_bytes!("../assets/fonts/default.ttf").to_vec();
+    let font_data = include_bytes!("../assets/fonts/InterDisplay-Bold.otf").to_vec();
     let font = FontRef::try_from_slice(&font_data).map_err(|_| "字体加载失败")?;
 
     let rows = 2u32;
