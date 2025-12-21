@@ -60,3 +60,19 @@ pub fn apply_rounded_glass_effect(img: &DynamicImage) -> ImageBuffer<Rgba<u8>, V
 
     final_canvas
 }
+
+pub fn make_image_white(img: &DynamicImage) -> DynamicImage {
+    let mut new_img = img.to_rgba8();
+    
+    for pixel in new_img.pixels_mut() {
+        // pixel[3] 是 Alpha 通道。只要不是完全透明，就把 RGB 设为白色
+        // 这样可以保留抗锯齿边缘的半透明效果，但颜色变白
+        if pixel[3] > 0 {
+            pixel[0] = 255; // R
+            pixel[1] = 255; // G
+            pixel[2] = 255; // B
+        }
+    }
+    
+    DynamicImage::ImageRgba8(new_img)
+}

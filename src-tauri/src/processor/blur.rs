@@ -1,10 +1,66 @@
 use image::{DynamicImage, GenericImageView, Rgba, imageops};
 use ab_glyph::{FontRef, PxScale};
-use std::time::Instant; // 🟢 引入计时器
+use std::time::Instant;
 
 use crate::resources::BrandLogos;
 use crate::graphics;
-use super::{clean_model_name, format_model_text};
+// 引入父模块公共工具
+use super::{clean_model_name, resize_image_by_height};
+
+/// 内部配置结构体：统一管理参数
+struct BlurConfig {
+    // --- 基础布局 ---
+    border_ratio: f32,       // 边框占宽度的比例
+    bottom_extra_ratio: f32, // 底部留白高度比例
+
+    // --- 背景与特效 ---
+    blur_sigma: f32,         // 模糊强度
+    bg_brightness: i32,      // 背景亮度调整
+    process_limit: u32,      // 处理时的最大像素限制(优化性能)
+
+    // --- 字体与排版 ---
+    font_size_model_ratio: f32,  // 机型文字大小
+    font_size_params_ratio: f32, // 参数文字大小
+    line_gap_ratio: f32,         // 两行文字的基础间距
+    text_block_centering_ratio: f32, // 文字块整体垂直居中比例
+
+    // --- Logo 与 机型文字微调 ---
+    logo_word_scale: f32,  // "Nikon" 单词大小比例
+    logo_z_scale: f32,     // "Z" Logo 大小比例
+    model_text_scale: f32, // 机型文字大小比例
+    
+    // 🟢 [关键修改] 机型数字(如"50")的独立垂直偏移比例
+    // 正数表示向下移，负数向上移
+    model_text_y_shift_ratio: f32, 
+}
+
+impl Default for BlurConfig {
+    fn default() -> Self {
+        Self {
+            border_ratio: 0.08,
+            bottom_extra_ratio: 0.6,
+            
+            blur_sigma: 30.0,
+            bg_brightness: -180,
+            process_limit: 400,
+
+            font_size_model_ratio: 0.55,
+            font_size_params_ratio: 0.32,
+            line_gap_ratio: 0.12,
+            text_block_centering_ratio: 0.5,
+
+            // Logo 比例保持您之前的设定
+            logo_word_scale: 0.8,
+            logo_z_scale: 0.6,
+            model_text_scale: 0.65,
+
+            // 🟢 在这里调整 "50" 的位置
+            // 0.05 是一个相对边框宽度的比例，您可以根据视觉效果微调
+            // 比如边框是 300px，0.05 大约就是下移 15px
+            model_text_y_shift_ratio: 0.10, 
+        }
+    }
+}
 
 pub fn process(
     img: &DynamicImage,
@@ -16,26 +72,32 @@ pub fn process(
     shadow_intensity: f32,
     logos: &BrandLogos 
 ) -> DynamicImage {
+    // 初始化配置
+    let cfg = BlurConfig::default();
+    
     let t0 = Instant::now();
     let (width, height) = img.dimensions();
-    let border_size = (width as f32 * 0.08) as u32; 
-    let bottom_extra = (border_size as f32 * 0.6) as u32; 
+
+    // 1. 基础尺寸
+    let border_size = (width as f32 * cfg.border_ratio) as u32; 
+    let bottom_extra = (border_size as f32 * cfg.bottom_extra_ratio) as u32; 
     let canvas_w = width + border_size * 2;
     let canvas_h = height + border_size * 2 + bottom_extra;
 
-    // 1. 模糊背景 (性能热点)
+    // 2. 模糊背景
     let t_blur = Instant::now();
-    let process_limit = 400u32; 
-    let scale_factor_bg = (width.max(height) as f32 / process_limit as f32).max(1.0);
+    let scale_factor_bg = (width.max(height) as f32 / cfg.process_limit as f32).max(1.0);
     let small_w = (canvas_w as f32 / scale_factor_bg) as u32;
     let small_h = (canvas_h as f32 / scale_factor_bg) as u32;
+    
     let small_img = img.resize_exact(small_w, small_h, imageops::FilterType::Nearest);
-    let mut blurred = small_img.blur(30.0);
-    imageops::colorops::brighten(&mut blurred, -180);
+    let mut blurred = small_img.blur(cfg.blur_sigma);
+    imageops::colorops::brighten(&mut blurred, cfg.bg_brightness);
+    
     let mut canvas = blurred.resize_exact(canvas_w, canvas_h, imageops::FilterType::Triangle).to_rgba8();
     println!("  - [PERF] 高斯模糊背景生成: {:.2?}", t_blur.elapsed());
 
-    // 2. 玻璃与阴影
+    // 3. 玻璃与阴影
     let t_shadow = Instant::now();
     let glass_img = graphics::apply_rounded_glass_effect(img);
     let shadow_img = graphics::create_diffuse_shadow(glass_img.width(), glass_img.height(), border_size, shadow_intensity);
@@ -54,52 +116,99 @@ pub fn process(
     imageops::overlay(&mut canvas, &glass_img, overlay_x, overlay_y);
     println!("  - [PERF] 阴影与玻璃特效合成: {:.2?}", t_shadow.elapsed());
 
-    // 3. 文字布局参数
+    // 4. 文字布局计算
     let text_color = Rgba([255, 255, 255, 255]); 
     let sub_text_color = Rgba([200, 200, 200, 255]); 
-    let font_size_model = border_size as f32 * 0.55; 
-    let font_size_params = border_size as f32 * 0.32; 
-    let scale_model = PxScale::from(font_size_model);
+    
+    let font_size_model = border_size as f32 * cfg.font_size_model_ratio; 
+    let font_size_params = border_size as f32 * cfg.font_size_params_ratio; 
     let scale_params = PxScale::from(font_size_params);
+    
     let text_area_start_y = (border_size + height) as f32;
     let text_area_total_h = (border_size + bottom_extra) as f32;
-    let line_gap = font_size_model * 0.12; 
+    let line_gap = font_size_model * cfg.line_gap_ratio; 
+    
     let text_block_h = font_size_model + line_gap + font_size_params;
-    let padding_top = (text_area_total_h - text_block_h) / 2.0;
+    let padding_top = (text_area_total_h - text_block_h) * cfg.text_block_centering_ratio;
+    
     let line1_y = (text_area_start_y + padding_top).round() as i32;
     let line2_y = (text_area_start_y + padding_top + font_size_model + line_gap).round() as i32;
 
-    // 4. 居中绘制机型
+    // 5. 绘制第一行：Logo + 机型文字
     if !camera_model.is_empty() {
-        if let Some(logo) = &logos.icon {
-            let model_text = clean_model_name(camera_make, camera_model);
-            let target_logo_h = (font_size_model * 0.85) as u32;
-            let ratio = logo.width() as f32 / logo.height() as f32;
-            let target_logo_w = (target_logo_h as f32 * ratio) as u32;
-            let scaled_logo = logo.resize_exact(target_logo_w, target_logo_h, imageops::FilterType::Lanczos3);
+        let base_h = font_size_model * 1.2; 
 
-            let text_w = if model_text.is_empty() { 0 } else { graphics::measure_text_width(font, &model_text, scale_model) };
-            let spacing = if model_text.is_empty() { 0 } else { 15 };
-            let total_w = target_logo_w + spacing + text_w;
+        // 使用配置参数
+        let h_word = (base_h * cfg.logo_word_scale) as u32;
+        let h_z    = (base_h * cfg.logo_z_scale) as u32;
+        let s_text = base_h * cfg.model_text_scale;
 
-            let mut current_x = (canvas_w as i32 - total_w as i32) / 2;
-            let text_visual_center = line1_y + (font_size_model as i32 / 2);
-            let logo_y = text_visual_center - (scaled_logo.height() as i32 / 2);
-            
-            imageops::overlay(&mut canvas, &scaled_logo, current_x as i64, logo_y as i64);
-            current_x += target_logo_w as i32 + spacing as i32;
+        let spacing = (font_size_model * 0.3) as u32; 
+        let mut total_w = 0;
 
-            if !model_text.is_empty() {
-                graphics::draw_text_high_quality(&mut canvas, text_color, current_x, line1_y, scale_model, font, &model_text, font_weight);
-            }
-        } else {
-            let full_text = format_model_text(camera_model);
-            let text_w = graphics::measure_text_width(font, &full_text, scale_model);
-            let text_x = ((canvas_w as i32 - text_w as i32) / 2).max(0);
-            graphics::draw_text_high_quality(&mut canvas, text_color, text_x, line1_y, scale_model, font, &full_text, font_weight);
+        // --- 预计算宽度 ---
+        let scaled_word = if let Some(w) = &logos.word {
+            let white_w = graphics::make_image_white(w);
+            let s = resize_image_by_height(&white_w, h_word);
+            total_w += s.width() + spacing;
+            Some(s)
+        } else { None };
+
+        let scaled_z = if let Some(z) = &logos.z_symbol {
+            let white_z = graphics::make_image_white(z);
+            let s = resize_image_by_height(&white_z, h_z);
+            total_w += s.width() + spacing;
+            Some(s)
+        } else { None };
+
+        let model_str = clean_model_name(camera_make, camera_model);
+        let text_img = if !model_str.is_empty() {
+            let img = graphics::generate_skewed_text_high_quality(
+                &model_str, font, PxScale::from(s_text), text_color, 0.23
+            );
+            total_w += img.width();
+            Some(img)
+        } else { None };
+
+        // --- 绘制元素 ---
+        let mut current_x = (canvas_w as i32 - total_w as i32) / 2;
+        let row_center_y = line1_y + (font_size_model as i32 / 2);
+
+        // A. Nikon Logo
+        if let Some(img) = scaled_word {
+            let y = row_center_y - (img.height() as i32 / 2);
+            imageops::overlay(&mut canvas, &img, current_x as i64, y as i64);
+            current_x += img.width() as i32 + spacing as i32;
+        }
+
+        // B. Z Logo
+        let mut z_bottom_y = 0;
+        if let Some(img) = scaled_z {
+            let y = row_center_y - (img.height() as i32 / 2);
+            imageops::overlay(&mut canvas, &img, current_x as i64, y as i64);
+            z_bottom_y = y + img.height() as i32;
+            current_x += img.width() as i32 + spacing as i32;
+        }
+
+        // C. 机型数字 (如 "50")
+        if let Some(img) = text_img {
+            // 计算基础 Y 坐标 (底部对齐 Z Logo 或 垂直居中)
+            let base_y = if z_bottom_y > 0 {
+                z_bottom_y - img.height() as i32
+            } else {
+                row_center_y - (img.height() as i32 / 2)
+            };
+
+            // 🟢 [关键修改] 应用额外的垂直偏移
+            let extra_offset = (border_size as f32 * cfg.model_text_y_shift_ratio) as i32;
+            let final_y = base_y + extra_offset;
+
+            let x = current_x - 10; 
+            imageops::overlay(&mut canvas, &img, x as i64, final_y as i64);
         }
     }
 
+    // 6. 绘制第二行：拍摄参数
     if !shooting_params.is_empty() {
         let text_w = graphics::measure_text_width(font, shooting_params, scale_params);
         let text_x = ((canvas_w as i32 - text_w as i32) / 2).max(0);
