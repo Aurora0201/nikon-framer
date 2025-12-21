@@ -6,6 +6,7 @@ mod debug;
 mod graphics;
 
 use metadata::PhotoMetadata;
+use std::time::Instant; // 🟢 引入计时器
 
 // --- Tauri Commands ---
 
@@ -16,23 +17,23 @@ fn get_font_list() -> Vec<String> {
 
 #[tauri::command]
 fn read_photo_metadata(file_path: String) -> Result<PhotoMetadata, String> {
-    // 🟢 更新：接收 3 个返回值 (Make, Model, Params)
+    let start = Instant::now(); // ⏱️ 开始计时
+
     let (make, model, params) = metadata::get_exif_string_tuple(&file_path);
     
-    // 为了前端显示，如果 Model 字符串里不包含 Make，我们把它们拼起来显示
-    // 例如 Make="Nikon", Model="Z 8" -> 显示 "Nikon Z 8"
-    // 如果 Model 本身就是 "Nikon Z 8"，就不重复拼了
     let display_model = if model.to_uppercase().starts_with(&make.to_uppercase()) {
         model.clone()
     } else {
         format!("{} {}", make, model)
     };
 
+    println!("🚀 [PERF] 元数据读取耗时: {:.2?}", start.elapsed()); // ⏱️ 打印耗时
+
     Ok(PhotoMetadata {
         model: display_model,
         f_number: "See Params".to_string(),
         exposure_time: "See Params".to_string(),
-        iso: params, // 这里的 params 已经是拼接好的光圈/快门/ISO字符串
+        iso: params, 
         focal_length: "".to_string(),
     })
 }
@@ -46,24 +47,30 @@ async fn process_single_image(
     shadow_intensity: f32 
 ) -> Result<String, String> {
     
-    // 🟢 1. 在主线程读取元数据 (Make, Model, Params)
-    // 这是为了获取厂商名 (make) 以便加载 Logo，以及获取准确的型号 (model) 进行排版
+    let total_start = Instant::now(); // ⏱️ 总任务开始
+    println!("--------------------------------------------------");
+    println!("🚀 [PERF] 收到处理请求: {:?}", file_path);
+
+    // 1. 读取元数据
+    let t_meta = Instant::now();
     let (make, model, params) = metadata::get_exif_string_tuple(&file_path);
+    println!("⏱️ [PERF] Main线程-元数据提取: {:.2?}", t_meta.elapsed());
 
     let result = tauri::async_runtime::spawn_blocking(move || {
-        // 🟢 2. 将分离的元数据传入 Processor
-        // 注意参数顺序必须与 processor::run 定义的一致
         processor::run(
             file_path, 
             style, 
             font_filename, 
             font_weight, 
             shadow_intensity, 
-            make,   // 新增
-            model,  // 新增
-            params  // 新增
+            make,   
+            model,  
+            params  
         )
     }).await;
+
+    println!("✅ [PERF] 任务总耗时 (含线程调度): {:.2?}", total_start.elapsed());
+    println!("--------------------------------------------------");
 
     match result {
         Ok(inner_result) => inner_result,
@@ -71,16 +78,13 @@ async fn process_single_image(
     }
 }
 
+// ... debug commands 保持不变 ...
 #[tauri::command]
 async fn debug_shadow_grid() -> Result<String, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
         debug::generate_shadow_grid()
     }).await;
-
-    match result {
-        Ok(inner_result) => inner_result,
-        Err(e) => Err(format!("Debug 任务失败: {}", e)),
-    }
+    match result { Ok(r) => r, Err(e) => Err(e.to_string()) }
 }
 
 #[tauri::command]
@@ -88,11 +92,7 @@ async fn debug_weight_grid() -> Result<String, String> {
     let result = tauri::async_runtime::spawn_blocking(move || {
         debug::generate_weight_grid()
     }).await;
-
-    match result {
-        Ok(inner_result) => inner_result,
-        Err(e) => Err(format!("Debug 任务失败: {}", e)),
-    }
+    match result { Ok(r) => r, Err(e) => Err(e.to_string()) }
 }
 
 fn main() {
