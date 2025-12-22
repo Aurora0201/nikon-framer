@@ -58,6 +58,7 @@ pub fn run(
     shadow_intensity: f32,
     camera_make: String,
     camera_model: String,
+    
     shooting_params: String
 ) -> Result<String, String> {
     

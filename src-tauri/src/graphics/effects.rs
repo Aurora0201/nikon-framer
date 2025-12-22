@@ -1,4 +1,4 @@
-use image::{DynamicImage, ImageBuffer, Rgba, imageops, GenericImageView};
+use image::{DynamicImage, ImageBuffer, Rgba, imageops};
 use imageproc::rect::Rect;
 // 引用同级目录下的 shapes 模块
 use super::shapes::draw_rounded_rect_mut;
