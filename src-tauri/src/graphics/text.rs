@@ -1,4 +1,4 @@
-use image::{ImageBuffer, Rgba, imageops, GenericImageView};
+use image::{ImageBuffer, Rgba, imageops};
 use imageproc::drawing::draw_text_mut;
 use ab_glyph::{Font, FontRef, PxScale, ScaleFont}; 
 
