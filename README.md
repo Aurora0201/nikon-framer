@@ -74,7 +74,7 @@ npm run tauri build
 
 | **高斯模糊风格 (Blur)**      | **极简白底风格 (White)**     |
 | ---------------------------- | ---------------------------- |
-| ![blur](imgs\blur.jpg) | ![white](imgs\white.jpg) |
+| ![blur](imgs/blur.jpg) | ![white](imgs/white.jpg) |
 
 ## 📝 待办事项 (Todo)
 
