@@ -4,116 +4,349 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Nikon Z Framer</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+
   <style>
-    /* --- 基础样式 (深色模式) --- */
+    /* --- 全局与基础样式 (深色模式) --- */
+    :root {
+      --nikon-yellow: #ffe100;
+      --bg-color: #1a1a1a;
+      --card-bg: #2c2c2c;
+      --input-bg: #333;
+      --text-main: #e0e0e0;
+      --text-sub: #aaa;
+      --border-color: #444;
+    }
+
+    * {
+      box-sizing: border-box; /* 统一盒模型 */
+    }
+
     body {
-      font-family: "Segoe UI", sans-serif;
-      background-color: #1a1a1a;
-      color: #e0e0e0;
+      /* 🟢 [修改] 字体优先级：Inter -> 思源黑体 -> 系统默认 */
+      font-family: "Inter", "Noto Sans SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
       display: flex;
       flex-direction: column;
       align-items: center;
       padding: 40px;
       margin: 0;
-      user-select: none; /* 防止双击选中文字 */
+      user-select: none;
+      min-height: 100vh;
     }
 
+    /* 自定义滚动条 (Webkit) */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #222; 
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #555; 
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #777; 
+    }
+
+    /* --- 标题样式 --- */
     h1 {
       margin-bottom: 30px;
       font-style: italic;
+      letter-spacing: 1px;
     }
     
     h1 span {
-      color: #ffe100; /* 尼康黄 */
+      color: var(--nikon-yellow);
       font-weight: 900;
     }
 
-    /* --- 控件容器 --- */
+    /* --- 主控制卡片容器 --- */
     .control-group {
-      background: #2c2c2c;
-      padding: 20px 30px;
-      border-radius: 8px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+      background: var(--card-bg);
+      padding: 25px 30px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
       width: 100%;
-      max-width: 400px;
+      max-width: 420px;
       display: flex;
       flex-direction: column;
-      gap: 15px;
+      gap: 18px;
     }
 
     label {
       font-size: 0.9em;
-      color: #aaa;
-      margin-bottom: 5px;
+      color: var(--text-sub);
+      margin-bottom: 6px;
       display: block;
+      font-weight: 500;
     }
 
     /* --- 输入框与下拉菜单 --- */
-    select {
+    select, input[type="text"] {
       width: 100%;
-      padding: 10px;
-      background: #333;
+      padding: 10px 12px;
+      background: var(--input-bg);
       color: white;
-      border: 1px solid #444;
-      border-radius: 4px;
-      font-size: 1em;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 0.95em;
       outline: none;
+      transition: border-color 0.2s;
+      /* 🟢 [新增] 确保输入框也使用新字体 */
+      font-family: inherit; 
     }
     
     select:focus {
-      border-color: #ffe100;
+      border-color: var(--nikon-yellow);
     }
 
-    /* --- 字体选择行的布局 (下拉框 + 刷新按钮) --- */
+    /* --- 字体选择行的布局 --- */
     .font-row {
       display: flex;
       gap: 10px;
     }
 
+    /* --- 通用图标按钮 --- */
     .icon-btn {
       background: #444;
       border: 1px solid #555;
       color: white;
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
       padding: 0 12px;
       font-size: 1.2em;
       transition: background 0.2s, transform 0.5s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     
     .icon-btn:hover {
       background: #555;
     }
 
-    /* --- 主操作按钮 --- */
-    #select-btn {
+    /* --- 批处理区域样式 --- */
+    .batch-controls {
+      border-top: 1px solid var(--border-color);
       margin-top: 10px;
-      padding: 12px;
-      font-size: 1.1em;
-      font-weight: bold;
+      padding-top: 20px;
+    }
+
+    .batch-btn-group {
+      display: flex; 
+      gap: 10px; 
+      margin-bottom: 12px;
+    }
+
+    .secondary-btn {
+      flex: 1;
+      background: #3a3a3a;
+      color: #ddd;
+      border: 1px solid var(--border-color);
+      padding: 8px;
+      border-radius: 6px;
       cursor: pointer;
-      background-color: #ffe100;
-      color: #1a1a1a; /* 黑字 */
+      font-size: 0.9em;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .secondary-btn:hover {
+      background: #4a4a4a;
+      border-color: #666;
+      color: white;
+    }
+
+    /* 拖拽区域 */
+    .drop-zone {
+      border: 2px dashed #555;
+      border-radius: 8px;
+      height: 180px; /* 🟢 [微调]稍微加高一点，容纳双行显示 */
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: #222;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .drop-zone.active {
+      border-color: var(--nikon-yellow);
+      background: rgba(255, 225, 0, 0.05);
+    }
+
+    .drop-zone.has-files {
+      justify-content: flex-start;
+      align-items: stretch;
+    }
+
+    #empty-tip {
+      margin-top: 60px;
+      text-align: center;
+      color: #666;
+      font-size: 0.9em;
+      pointer-events: none;
+    }
+    #empty-tip p { margin: 2px 0; }
+
+    /* 文件列表 */
+    .file-list {
+      width: 100%;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .file-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center; /* 垂直居中右侧的删除按钮 */
+      padding: 10px 12px;
+      border-bottom: 1px solid #333;
+      font-size: 0.85em;
+      background: #222;
+      animation: fadeIn 0.2s ease-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .file-item:last-child {
+      border-bottom: none;
+    }
+
+    /* 🟢 [修改] 左侧信息区域：改为垂直排列 (Column) */
+    .file-info {
+      display: flex;
+      flex-direction: column; /* 关键：垂直堆叠 */
+      align-items: flex-start; /* 左对齐 */
+      gap: 4px; /* 两行之间的间距 */
+      flex: 1;
+      overflow: hidden; 
+      padding-right: 10px; /* 防止文字挨着删除按钮 */
+    }
+    
+    /* 🟢 [修改] 第一行：文件名 */
+    .file-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #e0e0e0;
+      font-weight: 500;
+      width: 100%; /* 占满容器宽度 */
+      font-size: 14px;
+    }
+
+    /* --- 極簡狀態標籤 --- */
+    .tag-exif {
+      font-family: "Inter", sans-serif; /* 使用英文字體，數字更好看 */
+      font-size: 10px;
+      font-weight: 700;       /* 加粗，確保小字清晰 */
+      letter-spacing: 0.5px;  /* 增加字間距 */
+      padding: 2px 6px;
+      border-radius: 3px;     /* 微圓角 */
+      text-transform: uppercase; /* 強制大寫 */
+    }
+
+    /* 🟢 有 EXIF：低調的綠色文字 + 極淡的綠色背景 */
+    .tag-exif.ok {
+      color: #66bb6a; 
+      background-color: rgba(102, 187, 106, 0.1);
+    }
+
+    /* 🔴 无 EXIF：改为显眼的红色风格 */
+    .tag-exif.no {
+      color: #ffcdd2; /* 较亮的浅红色文字，保证可读性 */
+      background-color: rgba(183, 28, 28, 0.4); /* 深红色半透明背景 */
+      /* 如果觉得不够显眼，可以去掉下面这行注释，加上红色边框 */
+      /* border: 1px solid #ef5350; */
+    }
+
+    /* 🟡 檢測中：尼康黃，簡單閃爍 */
+    .tag-exif.wait {
+      color: #ffe100;
+      background: transparent;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0.5; }
+    }
+
+    /* 删除按钮 */
+    .remove-item-btn {
+      background: none; 
+      border: none; 
+      cursor: pointer; 
+      color: #666; 
+      font-size: 18px; 
+      padding: 5px;
+      line-height: 1;
+      transition: color 0.2s;
+      flex-shrink: 0; /* 防止被挤压 */
+    }
+    .remove-item-btn:hover { color: #ff5555; }
+
+    /* 底部统计栏 */
+    .queue-stats {
+      display: flex; 
+      justify-content: space-between; 
+      font-size: 0.8em; 
+      color: #777; 
+      margin-top: 8px;
+      padding: 0 5px;
+    }
+    
+    #clear-list-btn:hover {
+      color: #ff5555;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    /* --- 主操作按钮 --- */
+    #start-batch-btn {
+      margin-top: 15px;
+      padding: 14px;
+      font-size: 1.1em;
+      font-weight: 800;
+      cursor: pointer;
+      background-color: var(--nikon-yellow);
+      color: #1a1a1a;
       border: none;
-      border-radius: 4px;
-      transition: transform 0.1s, background 0.2s;
+      border-radius: 6px;
+      transition: transform 0.1s, background 0.2s, filter 0.2s;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-family: "Inter", sans-serif; /* 按钮也用新字体 */
     }
 
-    #select-btn:hover {
+    #start-batch-btn:hover {
       background-color: #ffd500;
+      filter: brightness(1.1);
     }
 
-    #select-btn:active {
+    #start-batch-btn:active {
       transform: scale(0.98);
     }
 
-    #select-btn:disabled {
-      background-color: #555;
+    #start-batch-btn:disabled {
+      background-color: #444;
       color: #888;
       cursor: not-allowed;
+      filter: none;
     }
 
-    /* --- 状态区域 (文字 + Loading) --- */
+    /* --- 状态区域 --- */
     #status-container {
       margin-top: 20px;
       display: flex;
@@ -125,17 +358,16 @@
 
     #status {
       font-size: 0.9em;
-      color: #777;
+      color: #888;
       margin: 0;
     }
 
-    /* Loading 动画环 */
     .spinner {
-      display: none; /* 默认隐藏 */
+      display: none;
       width: 18px;
       height: 18px;
       border: 3px solid #555;
-      border-top: 3px solid #ffe100;
+      border-top: 3px solid var(--nikon-yellow);
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }
@@ -145,15 +377,15 @@
       100% { transform: rotate(360deg); }
     }
 
-    /* --- 预览弹窗 (Modal) --- */
+    /* --- 预览弹窗 --- */
     #preview-modal {
-      display: none; /* 默认隐藏 */
+      display: none;
       position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.9); /* 深色遮罩 */
+      background: rgba(0, 0, 0, 0.95);
       z-index: 1000;
       justify-content: center;
       align-items: center;
@@ -161,15 +393,16 @@
       backdrop-filter: blur(5px);
     }
 
-    /* 预览容器：限制范围，隐藏滚动条以支持拖拽 */
     .preview-container {
       position: relative;
       width: 90%;
-      height: 85%;
-      overflow: hidden; /* 隐藏滚动条 */
-      background: rgba(255, 255, 255, 0.05); /* 微弱背景 */
+      height: 80%;
+      overflow: hidden;
+      background: radial-gradient(#333 1px, transparent 1px);
+      background-size: 20px 20px;
+      background-color: #111;
       border: 1px solid #444;
-      border-radius: 4px;
+      border-radius: 8px;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -178,33 +411,43 @@
     #preview-img {
       max-width: 100%;
       max-height: 100%;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-      /* 移除 transition 以保证拖拽跟手 */
+      box-shadow: 0 20px 50px rgba(0,0,0,0.8);
       transform-origin: center center;
-      cursor: grab; /* 默认手型 */
-      user-select: none; /* 禁止选中 */
-      -webkit-user-drag: none; /* 禁止原生拖拽 */
+      cursor: grab;
+      user-select: none;
+      -webkit-user-drag: none;
     }
 
     #preview-img:active {
-      cursor: grabbing; /* 抓紧手型 */
+      cursor: grabbing;
     }
 
     #close-preview-btn {
-      margin-top: 20px;
+      margin-top: 25px;
       background: transparent;
       border: 2px solid #666;
       color: #aaa;
-      padding: 8px 30px;
-      border-radius: 20px;
+      padding: 10px 40px;
+      border-radius: 30px;
       cursor: pointer;
-      font-size: 0.9em;
+      font-size: 1em;
       transition: all 0.2s;
+      font-weight: 500;
+      font-family: inherit;
     }
 
     #close-preview-btn:hover {
       border-color: white;
       color: white;
+      background: rgba(255,255,255,0.1);
+    }
+
+    /* --- 调试工具栏 --- */
+    .debug-tools {
+      margin-top: 20px; 
+      border-top: 1px solid #333; 
+      padding-top: 15px;
+      width: 100%;
     }
   </style>
 </head>
@@ -213,6 +456,7 @@
   <h1>NIKON <span>Z</span> FRAMER</h1>
 
   <div class="control-group">
+    
     <div>
       <label for="style-select">边框样式 / Frame Style</label>
       <select id="style-select">
@@ -240,20 +484,42 @@
       </select>
     </div>
 
-    <div id="shadow-control-group">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <label for="shadow-intensity">阴影强度 / Shadow Intensity</label>
+    <div id="shadow-control-group" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+        <label for="shadow-intensity" style="margin:0;">阴影强度 / Shadow Intensity</label>
         <span id="shadow-val" style="font-size: 0.9em; color: #ffe100;">1.0</span>
       </div>
       <input type="range" id="shadow-intensity" min="0" max="2" step="0.1" value="1.0" style="width: 100%; cursor: pointer;">
     </div>
 
-    <button id="select-btn">选择图片并生成</button>
+    <div class="batch-controls">
+      <label>处理列表 / Processing Queue</label>
+      
+      <div class="batch-btn-group">
+        <button id="add-files-btn" class="secondary-btn">+ 添加文件 (Files)</button>
+        <button id="add-folder-btn" class="secondary-btn">+ 添加文件夹 (Folder)</button>
+      </div>
+
+      <div id="drop-zone" class="drop-zone">
+        <div id="empty-tip">
+          <p>拖拽照片到此处</p>
+          <p style="font-size: 0.8em; opacity: 0.7;">(Drag & Drop files here)</p>
+        </div>
+        <ul id="file-list" class="file-list"></ul>
+      </div>
+
+      <div class="queue-stats">
+        <span id="queue-count">0 张照片</span>
+        <button id="clear-list-btn" style="background:none; border:none; color:#777; font-size:inherit;">清空列表 (Clear)</button>
+      </div>
+    </div>
+
+    <button id="start-batch-btn">开始批处理 (Start Batch)</button>
   </div>
   
   <div id="status-container">
     <div id="loading-spinner" class="spinner"></div>
-    <p id="status">等待操作...</p>
+    <p id="status">准备就绪，请添加照片。</p>
   </div>
 
   <div id="preview-modal">
@@ -263,34 +529,18 @@
     <button id="close-preview-btn">关闭预览 (Close)</button>
   </div>
 
-  <div style="margin-top: 20px; border-top: 1px solid #444; padding-top: 15px;">
-      <label style="color: #666; font-size: 0.8em; margin-bottom: 8px;">开发者工具 / Debug Tools</label>
-      
+  <div class="debug-tools">
+      <label style="color: #666; font-size: 0.8em; margin-bottom: 8px; display:block;">开发者工具 / Debug Tools</label>
       <div style="display: flex; gap: 10px;">
-        <button id="debug-shadow-btn" style="
-          background: #444; 
-          color: #ccc; 
-          border: 1px dashed #666; 
-          flex: 1;
-          padding: 8px; 
-          cursor: pointer;
-          font-size: 0.9em;">
-          🐞 阴影测试 (Shadows)
+        <button id="debug-shadow-btn" class="secondary-btn" style="font-size: 0.8em; border-style: dashed;">
+          🐞 阴影测试
         </button>
-        
-        <button id="debug-weight-btn" style="
-          background: #444; 
-          color: #ccc; 
-          border: 1px dashed #666; 
-          flex: 1;
-          padding: 8px; 
-          cursor: pointer;
-          font-size: 0.9em;">
-          🐞 字体粗细 (Weight)
+        <button id="debug-weight-btn" class="secondary-btn" style="font-size: 0.8em; border-style: dashed;">
+          🐞 粗细测试
         </button>
       </div>
-    </div>
+  </div>
 
-  <script type="module" src="src/main.js"></script>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>
