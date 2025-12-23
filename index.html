@@ -4,215 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Nikon Z Framer</title>
-  <style>
-    /* --- 基础样式 (深色模式) --- */
-    body {
-      font-family: "Segoe UI", sans-serif;
-      background-color: #1a1a1a;
-      color: #e0e0e0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 40px;
-      margin: 0;
-      user-select: none; /* 防止双击选中文字 */
-    }
 
-    h1 {
-      margin-bottom: 30px;
-      font-style: italic;
-    }
-    
-    h1 span {
-      color: #ffe100; /* 尼康黄 */
-      font-weight: 900;
-    }
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
 
-    /* --- 控件容器 --- */
-    .control-group {
-      background: #2c2c2c;
-      padding: 20px 30px;
-      border-radius: 8px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-      width: 100%;
-      max-width: 400px;
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
-
-    label {
-      font-size: 0.9em;
-      color: #aaa;
-      margin-bottom: 5px;
-      display: block;
-    }
-
-    /* --- 输入框与下拉菜单 --- */
-    select {
-      width: 100%;
-      padding: 10px;
-      background: #333;
-      color: white;
-      border: 1px solid #444;
-      border-radius: 4px;
-      font-size: 1em;
-      outline: none;
-    }
-    
-    select:focus {
-      border-color: #ffe100;
-    }
-
-    /* --- 字体选择行的布局 (下拉框 + 刷新按钮) --- */
-    .font-row {
-      display: flex;
-      gap: 10px;
-    }
-
-    .icon-btn {
-      background: #444;
-      border: 1px solid #555;
-      color: white;
-      border-radius: 4px;
-      cursor: pointer;
-      padding: 0 12px;
-      font-size: 1.2em;
-      transition: background 0.2s, transform 0.5s;
-    }
-    
-    .icon-btn:hover {
-      background: #555;
-    }
-
-    /* --- 主操作按钮 --- */
-    #select-btn {
-      margin-top: 10px;
-      padding: 12px;
-      font-size: 1.1em;
-      font-weight: bold;
-      cursor: pointer;
-      background-color: #ffe100;
-      color: #1a1a1a; /* 黑字 */
-      border: none;
-      border-radius: 4px;
-      transition: transform 0.1s, background 0.2s;
-    }
-
-    #select-btn:hover {
-      background-color: #ffd500;
-    }
-
-    #select-btn:active {
-      transform: scale(0.98);
-    }
-
-    #select-btn:disabled {
-      background-color: #555;
-      color: #888;
-      cursor: not-allowed;
-    }
-
-    /* --- 状态区域 (文字 + Loading) --- */
-    #status-container {
-      margin-top: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 30px;
-      gap: 10px;
-    }
-
-    #status {
-      font-size: 0.9em;
-      color: #777;
-      margin: 0;
-    }
-
-    /* Loading 动画环 */
-    .spinner {
-      display: none; /* 默认隐藏 */
-      width: 18px;
-      height: 18px;
-      border: 3px solid #555;
-      border-top: 3px solid #ffe100;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
-    /* --- 预览弹窗 (Modal) --- */
-    #preview-modal {
-      display: none; /* 默认隐藏 */
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.9); /* 深色遮罩 */
-      z-index: 1000;
-      justify-content: center;
-      align-items: center;
-      flex-direction: column;
-      backdrop-filter: blur(5px);
-    }
-
-    /* 预览容器：限制范围，隐藏滚动条以支持拖拽 */
-    .preview-container {
-      position: relative;
-      width: 90%;
-      height: 85%;
-      overflow: hidden; /* 隐藏滚动条 */
-      background: rgba(255, 255, 255, 0.05); /* 微弱背景 */
-      border: 1px solid #444;
-      border-radius: 4px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-    }
-
-    #preview-img {
-      max-width: 100%;
-      max-height: 100%;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-      /* 移除 transition 以保证拖拽跟手 */
-      transform-origin: center center;
-      cursor: grab; /* 默认手型 */
-      user-select: none; /* 禁止选中 */
-      -webkit-user-drag: none; /* 禁止原生拖拽 */
-    }
-
-    #preview-img:active {
-      cursor: grabbing; /* 抓紧手型 */
-    }
-
-    #close-preview-btn {
-      margin-top: 20px;
-      background: transparent;
-      border: 2px solid #666;
-      color: #aaa;
-      padding: 8px 30px;
-      border-radius: 20px;
-      cursor: pointer;
-      font-size: 0.9em;
-      transition: all 0.2s;
-    }
-
-    #close-preview-btn:hover {
-      border-color: white;
-      color: white;
-    }
-  </style>
+  <link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
 
   <h1>NIKON <span>Z</span> FRAMER</h1>
 
   <div class="control-group">
+    
     <div>
       <label for="style-select">边框样式 / Frame Style</label>
       <select id="style-select">
@@ -240,21 +44,58 @@
       </select>
     </div>
 
-    <div id="shadow-control-group">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <label for="shadow-intensity">阴影强度 / Shadow Intensity</label>
+    <div id="shadow-control-group" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+        <label for="shadow-intensity" style="margin:0;">阴影强度 / Shadow Intensity</label>
         <span id="shadow-val" style="font-size: 0.9em; color: #ffe100;">1.0</span>
       </div>
       <input type="range" id="shadow-intensity" min="0" max="2" step="0.1" value="1.0" style="width: 100%; cursor: pointer;">
     </div>
 
-    <button id="select-btn">选择图片并生成</button>
+    <div class="batch-controls">
+      <label>处理列表 / Processing Queue</label>
+      
+      <div class="batch-btn-group">
+        <button id="add-files-btn" class="secondary-btn">+ 添加文件 (Files)</button>
+        <button id="add-folder-btn" class="secondary-btn">+ 添加文件夹 (Folder)</button>
+      </div>
+
+      <div id="drop-zone" class="drop-zone">
+        <div id="empty-tip">
+          <p>拖拽照片到此处</p>
+          <p style="font-size: 0.8em; opacity: 0.7;">(Drag & Drop photos here)</p>
+        </div>
+        <ul id="file-list" class="file-list"></ul>
+      </div>
+
+      <div class="queue-stats">
+        <span id="queue-count">0 张照片</span>
+        <button id="clear-list-btn" style="background:none; border:none; color:#777; font-size:inherit;">清空列表 (Clear)</button>
+      </div>
+    </div>
+
+    <button id="start-batch-btn">开始批处理 (Start Batch)</button>
   </div>
   
-  <div id="status-container">
-    <div id="loading-spinner" class="spinner"></div>
-    <p id="status">等待操作...</p>
+  <div id="status-container" class="status-panel">
+  
+  <div class="spinner-wrapper">
+    <div id="loading-spinner" class="spinner" style="display: none;"></div>
   </div>
+
+  <div class="status-content">
+    
+    <div id="status" class="status-text">准备就绪，请添加照片。</div>
+
+    <div id="progress-container" class="progress-area" style="display: none;">
+      <div class="progress-track">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+      <div id="progress-text" class="progress-info">0%</div>
+    </div>
+    
+  </div>
+</div>
 
   <div id="preview-modal">
     <div class="preview-container">
@@ -263,34 +104,18 @@
     <button id="close-preview-btn">关闭预览 (Close)</button>
   </div>
 
-  <div style="margin-top: 20px; border-top: 1px solid #444; padding-top: 15px;">
-      <label style="color: #666; font-size: 0.8em; margin-bottom: 8px;">开发者工具 / Debug Tools</label>
-      
+  <div class="debug-tools">
+      <label style="color: #666; font-size: 0.8em; margin-bottom: 8px; display:block;">开发者工具 / Debug Tools</label>
       <div style="display: flex; gap: 10px;">
-        <button id="debug-shadow-btn" style="
-          background: #444; 
-          color: #ccc; 
-          border: 1px dashed #666; 
-          flex: 1;
-          padding: 8px; 
-          cursor: pointer;
-          font-size: 0.9em;">
-          🐞 阴影测试 (Shadows)
+        <button id="debug-shadow-btn" class="secondary-btn" style="font-size: 0.8em; border-style: dashed;">
+          🐞 阴影测试
         </button>
-        
-        <button id="debug-weight-btn" style="
-          background: #444; 
-          color: #ccc; 
-          border: 1px dashed #666; 
-          flex: 1;
-          padding: 8px; 
-          cursor: pointer;
-          font-size: 0.9em;">
-          🐞 字体粗细 (Weight)
+        <button id="debug-weight-btn" class="secondary-btn" style="font-size: 0.8em; border-style: dashed;">
+          🐞 粗细测试
         </button>
       </div>
-    </div>
+  </div>
 
-  <script type="module" src="src/main.js"></script>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 import { el } from './elements.js';
-import { previewState, updateTransform } from './state.js';
+import { previewState, updateTransform, fileQueue } from './state.js';
+import { checkExif } from './commands.js';
 
 export function setStatus(text, type = "normal") {
   el.status.innerText = text;
@@ -9,17 +10,40 @@ export function setStatus(text, type = "normal") {
   else el.status.style.color = "#333";
 }
 
+// 🟢 [修改] toggleLoading：加入进度条显隐控制
 export function toggleLoading(isLoading) {
-  if (isLoading) {
-    el.loadingSpinner.style.display = "block";
-    el.btn.disabled = true;
-    if(el.debugShadowBtn) el.debugShadowBtn.disabled = true;
-    if(el.debugWeightBtn) el.debugWeightBtn.disabled = true;
-  } else {
-    el.loadingSpinner.style.display = "none";
-    el.btn.disabled = false;
-    if(el.debugShadowBtn) el.debugShadowBtn.disabled = false;
-    if(el.debugWeightBtn) el.debugWeightBtn.disabled = false;
+  // 1. Loading 遮罩
+  if (el.loadingSpinner) {
+    el.loadingSpinner.style.display = isLoading ? "block" : "none";
+  }
+
+  // 2. 进度条容器控制
+  if (el.progressContainer) {
+    if (isLoading) {
+      el.progressContainer.style.display = "block";
+      updateProgress(0, 1); // 重置进度
+    } else {
+      setTimeout(() => {
+        el.progressContainer.style.display = "none";
+        // 重置宽度，视觉上归零
+        if (el.progressFill) el.progressFill.style.width = "0%";
+      }, 1500);
+    }
+  }
+
+  // 3. 禁用交互 (排除 start-batch-btn)
+  const interactables = document.querySelectorAll('input, select, button'); 
+  interactables.forEach(item => {
+    if (item.id === 'start-batch-btn' || item === el.startBatchBtn) return;
+    item.disabled = isLoading;
+  });
+
+  // 4. 视觉反馈
+  if (el.dropZone) {
+     el.dropZone.classList.toggle('disabled', isLoading);
+  }
+  if (el.fileList) {
+     el.fileList.classList.toggle('disabled-interaction', isLoading);
   }
 }
 
@@ -56,4 +80,87 @@ export function initUIEvents() {
 
     // 3. 初始化时执行一次检查 (设置默认状态)
     updateShadowVisibility();
+}
+
+export async function renderFileList() {
+  const list = el.fileList;
+  list.innerHTML = ""; // 清空a
+
+  // 控制空状态提示的显示
+  if (fileQueue.files.length === 0) {
+    el.emptyTip.style.display = "block";
+    list.style.display = "none";
+    el.queueCount.innerText = "0 张照片";
+    return;
+  }
+
+  el.emptyTip.style.display = "none";
+  list.style.display = "block";
+  el.queueCount.innerText = `${fileQueue.files.length} 张照片`;
+
+  // 遍历生成 DOM
+  for (let i = 0; i < fileQueue.files.length; i++) {
+    const file = fileQueue.files[i];
+
+    // 如果状态是 wait，异步去检查一下 EXIF
+    if (file.exifStatus === 'wait') {
+      checkExif(file.path).then(isOk => {
+        file.exifStatus = isOk ? 'ok' : 'no';
+        updateItemStatus(i, file.exifStatus); // 局部更新 DOM，不重绘整个列表
+      });
+    }
+
+    const li = document.createElement("li");
+    li.className = "file-item";
+    li.innerHTML = `
+      <div class="file-info">
+        <span class="file-name" title="${file.path}">
+          <span class="file-index">${i + 1}.</span>${file.name}
+        </span>
+        <span id="exif-tag-${i}" class="tag-exif ${file.exifStatus}">
+          ${getExifLabel(file.exifStatus)}
+        </span>
+      </div>
+      <button class="remove-item-btn" data-index="${i}">×</button>
+    `;
+    list.appendChild(li);
+  }
+
+  // 绑定删除按钮事件
+  document.querySelectorAll('.remove-item-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(e.target.dataset.index);
+      fileQueue.remove(idx);
+      renderFileList(); // 重新渲染
+    });
+  });
+}
+
+function getExifLabel(status) {
+  if (status === 'ok') return 'EXIF';      // 簡單明瞭
+  if (status === 'no') return 'NO EXIF';   // 或者用 'PNG' / 'BASIC'
+  return 'SCANNING...';
+}
+
+function updateItemStatus(index, status) {
+  const tag = document.getElementById(`exif-tag-${index}`);
+  if (tag) {
+    tag.className = `tag-exif ${status}`;
+    tag.innerText = getExifLabel(status);
+  }
+}
+
+
+// 🟢 [标准版] 更新进度条逻辑
+export function updateProgress(current, total) {
+  // 1. 安全检查：确保元素在 elements.js 中已正确获取
+  if (!el.progressFill || !el.progressText) return;
+  if (total <= 0) return;
+
+  // 2. 计算逻辑
+  const percentage = Math.round((current / total) * 100);
+
+  // 3. 更新 DOM (使用缓存的引用)
+  el.progressFill.style.width = `${percentage}%`;
+  el.progressText.innerText = `${current} / ${total} (${percentage}%)`;
 }
