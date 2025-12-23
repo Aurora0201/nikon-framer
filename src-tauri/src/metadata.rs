@@ -55,3 +55,56 @@ pub fn get_exif_string_tuple(path: &str) -> (String, String, String) {
 
     (make, model, params.join("  "))
 }
+
+// 🟢 [新增] 快速检查是否存在 EXIF
+pub fn has_exif(path: &str) -> bool {
+    let file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+    let mut bufreader = BufReader::new(&file);
+    let exifreader = exif::Reader::new();
+    // 只要能读到 header 就算成功，不需要解析具体字段
+    exifreader.read_from_container(&mut bufreader).is_ok()
+}
+
+// 🟢 [新增] 批量过滤：只保留文件，剔除文件夹
+#[tauri::command]
+pub fn filter_files(paths: Vec<String>) -> Vec<String> {
+    paths.into_iter()
+        .filter(|path| {
+            // 获取元数据，检查 is_file()
+            match fs::metadata(path) {
+                Ok(meta) => meta.is_file(),
+                Err(_) => false, // 无法读取的文件也过滤掉
+            }
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub fn scan_folder(folder_path: String) -> Vec<String> {
+    let allowed_exts = vec!["jpg", "jpeg", "png", "nef", "arw", "dng"];
+    let mut image_paths = Vec::new();
+
+    if let Ok(entries) = fs::read_dir(folder_path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            
+            // 只处理文件，忽略子文件夹（如果不希望递归的话）
+            if path.is_file() {
+                if let Some(ext) = path.extension() {
+                    if let Some(ext_str) = ext.to_str() {
+                        // 转小写进行比对
+                        if allowed_exts.contains(&ext_str.to_lowercase().as_str()) {
+                            if let Some(path_str) = path.to_str() {
+                                image_paths.push(path_str.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    image_paths
+}

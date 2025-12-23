@@ -16,6 +16,12 @@ fn get_font_list() -> Vec<String> {
 }
 
 #[tauri::command]
+fn check_file_exif(path: String) -> bool {
+    // 调用 metadata 模块里的 helper 函数
+    metadata::has_exif(&path)
+}
+
+#[tauri::command]
 fn read_photo_metadata(file_path: String) -> Result<PhotoMetadata, String> {
     let start = Instant::now(); // ⏱️ 开始计时
 
@@ -102,8 +108,11 @@ fn main() {
             process_single_image, 
             read_photo_metadata,
             get_font_list,
+            check_file_exif,
             debug_shadow_grid,
-            debug_weight_grid
+            debug_weight_grid,
+            metadata::filter_files,
+            metadata::scan_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
