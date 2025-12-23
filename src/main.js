@@ -35,12 +35,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   // 监听进度更新
   await listen('process-progress', (event) => {
     const { current, total, filepath, status } = event.payload;
-    
-    // 更新状态栏文案
+    // 🟢 [新增] 从完整路径中提取文件名 (兼容 Windows "\" 和 Unix "/")
+    const filename = filepath.replace(/^.*[\\/]/, '');
+    // 更新状态栏文案：使用 filename 替代 filepath
     if (status === 'skipped') {
-      setStatus(`[${current}/${total}] 跳过(无EXIF): ${filepath}`, "loading");
+      setStatus(`[${current}/${total}] 跳过(无EXIF): ${filename}`, "loading");
     } else {
-      setStatus(`[${current}/${total}] 正在处理: ${filepath}`, "loading");
+      setStatus(`正在处理: ${filename}`, "loading");
     }
 
     // 💡 这里可以扩展真正的进度条 UI

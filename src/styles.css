@@ -493,3 +493,29 @@ button.can-stop {
   width: 100%;
   max-width: 420px;
 }
+
+
+.file-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  
+  min-width: 20px;
+  height: 20px;
+  margin-right: 10px;
+  
+  background-color: #333; /* 比背景稍亮的块 */
+  color: #888;
+  border-radius: 4px;     /* 圆角 */
+  font-size: 10px;
+  font-weight: 600;
+  
+  /* 如果数字很大，允许宽度自适应 */
+  padding: 0 4px;
+}
+
+/* 列表项悬停时，序号高亮一点 */
+.file-item:hover .file-index {
+  background-color: #444;
+  color: var(--nikon-yellow); /* 悬停变黄 */
+}

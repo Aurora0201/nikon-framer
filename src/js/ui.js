@@ -114,7 +114,9 @@ export async function renderFileList() {
     li.className = "file-item";
     li.innerHTML = `
       <div class="file-info">
-        <span class="file-name" title="${file.path}">${file.name}</span>
+        <span class="file-name" title="${file.path}">
+          <span class="file-index">${i + 1}.</span>${file.name}
+        </span>
         <span id="exif-tag-${i}" class="tag-exif ${file.exifStatus}">
           ${getExifLabel(file.exifStatus)}
         </span>
