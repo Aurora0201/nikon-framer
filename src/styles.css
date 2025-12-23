@@ -12,14 +12,15 @@
   --border-color: #444;
 
   /* --- 状态颜色 (Status Colors) --- */
-  --status-ok-bg: rgba(102, 187, 106, 0.1);
+  --status-ok-bg: rgba(102, 187, 106, 0.15);
   --status-ok-text: #66bb6a;
   --status-no-bg: rgba(183, 28, 28, 0.4);
   --status-no-text: #ffcdd2;
+  --progress-green: #4caf50;
 
-  /* --- 字体设置 (保留原有的渲染优化) --- */
+  /* --- 字体设置 --- */
   font-family: "Inter", "Noto Sans SC", "Segoe UI", Helvetica, Arial, sans-serif;
-  font-size: 14px; /* 稍微调小基准字号以适应列表 */
+  font-size: 14px;
   line-height: 1.5;
   font-weight: 400;
 
@@ -27,30 +28,26 @@
   color: var(--text-main);
   background-color: var(--bg-color);
 
-  /* --- 渲染优化 (来自原 style.css) --- */
+  /* 渲染优化 */
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
 }
 
-/* 基础盒模型 */
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
   padding: 40px;
   display: flex;
   flex-direction: column;
-  align-items: center; /* 居中布局 */
+  align-items: center;
   min-height: 100vh;
-  user-select: none; /* 防止普通文本被意外选中 */
+  user-select: none;
 }
 
-/* 自定义滚动条 (Webkit) */
+/* 自定义滚动条 */
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: #222; }
 ::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
@@ -59,8 +56,6 @@ body {
 /* =========================================
    2. 基础元素样式 (Elements)
    ========================================= */
-
-/* 标题 */
 h1 {
   text-align: center;
   margin-bottom: 30px;
@@ -69,31 +64,15 @@ h1 {
   font-size: 2.2em;
   line-height: 1.1;
 }
-
 h1 span {
   color: var(--nikon-yellow);
   font-weight: 900;
 }
 
-/* 链接 (虽然目前没用到，但保留作为通用样式) */
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-  transition: 0.25s;
-}
-a:hover { color: #535bf2; }
-
-/* 输入框与按钮基础 (融合了原文件的 transition 逻辑) */
-/* =========================================
-   3. 表单组件 (Forms & Inputs) - 深度优化版
-   ========================================= */
-
-/* 1. 基础统一样式：强制高度，确保对齐 */
-select, 
-input[type="text"] {
+/* 输入框与Select统一 */
+select, input[type="text"] {
   width: 100%;
-  height: 42px; /* 🟢 关键：强制高度，防止 padding 导致的对齐偏差 */
+  height: 42px;
   padding: 0 12px;
   background-color: var(--input-bg);
   color: white;
@@ -103,105 +82,30 @@ input[type="text"] {
   font-family: inherit;
   outline: none;
   transition: all 0.2s ease;
-  
-  /* 🟢 关键：去除原生默认样式 (去掉系统自带的丑陋箭头) */
   appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
 }
 
-/* 2. 专门针对 Select 下拉框的自定义箭头 */
+/* Select 自定义箭头 */
 select {
-  padding-right: 35px; /* 右侧留出空间给箭头，防止文字挡住 */
+  padding-right: 35px;
   cursor: pointer;
-  
-  /* 使用 Data URI 嵌入一个简洁的灰色 SVG 向下箭头 */
   background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23aaaaaa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
   background-repeat: no-repeat;
-  background-position: right 10px center; /* 箭头靠右居中 */
+  background-position: right 10px center;
   background-size: 16px;
 }
 
-/* 3. 悬停状态 (Hover) */
-select:hover, 
-input[type="text"]:hover {
+select:hover, input[type="text"]:hover {
   border-color: #666;
-  background-color: #3a3a3a; /* 悬停时稍微变亮 */
+  background-color: #3a3a3a;
 }
 
-/* 4. 聚焦状态 (Focus) - 尼康黄高亮 */
-select:focus, 
-input[type="text"]:focus {
+select:focus, input[type="text"]:focus {
   border-color: var(--nikon-yellow);
   box-shadow: 0 0 0 1px rgba(255, 225, 0, 0.1);
-  
-  /* 🟢 聚焦时，把 SVG 箭头也变成黄色 (stroke='%23ffe100') */
   background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffe100' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
 }
 
-/* =========================================
-   布局修正 (确保 font-row 内的元素对齐)
-   ========================================= */
-
-/* 字体选择行的 Flex 布局 */
-.font-row {
-  display: flex;
-  gap: 10px;
-  width: 100%;
-}
-
-/* 让下拉框自动填满剩余空间 */
-.font-row select {
-  flex: 1; 
-}
-
-/* 刷新按钮样式微调 - 确保它是正方形且等高 */
-.icon-btn {
-  width: 42px;  /* 🟢 与输入框等高 */
-  height: 42px; /* 🟢 与输入框等高 */
-  background: #444;
-  border: 1px solid #555;
-  color: white;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-  flex-shrink: 0; /* 防止被挤压 */
-}
-
-.icon-btn:hover {
-  background: #555;
-  border-color: #777;
-  transform: rotate(180deg); /* 悬停旋转特效 */
-}
-
-/* 次级按钮 (添加文件/文件夹) */
-.secondary-btn {
-  flex: 1;
-  background: #3a3a3a;
-  color: #ddd;
-  border: 1px solid var(--border-color);
-  padding: 0 12px;
-  height: 38px; /* 比主输入框稍微矮一点点，增加层次感 */
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9em;
-  transition: all 0.2s;
-  font-family: inherit;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.secondary-btn:hover {
-  background: #4a4a4a;
-  border-color: #666;
-  color: white;
-}
-
-/* 标签 */
 label {
   font-size: 0.9em;
   color: var(--text-sub);
@@ -211,15 +115,13 @@ label {
 }
 
 /* =========================================
-   3. 布局容器 (Containers)
+   3. 布局与容器 (Containers)
    ========================================= */
-
-/* 主控制卡片 */
 .control-group {
   background: var(--card-bg);
   padding: 25px 30px;
   border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); /* 加深阴影 */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   width: 100%;
   max-width: 420px;
   display: flex;
@@ -227,13 +129,13 @@ label {
   gap: 18px;
 }
 
-/* 字体选择行的布局 */
 .font-row {
   display: flex;
   gap: 10px;
+  width: 100%;
 }
+.font-row select { flex: 1; }
 
-/* 批处理区域容器 */
 .batch-controls {
   border-top: 1px solid var(--border-color);
   margin-top: 10px;
@@ -247,40 +149,53 @@ label {
 }
 
 /* =========================================
-   4. 特定按钮样式 (Buttons)
+   4. 按钮样式 (Buttons)
    ========================================= */
-
-/* 图标按钮 (如刷新) */
+/* 图标按钮 */
 .icon-btn {
+  width: 42px;
+  height: 42px;
   background: #444;
-  border-color: #555;
+  border: 1px solid #555;
+  color: white;
+  border-radius: 6px;
   cursor: pointer;
-  padding: 0 12px;
-  font-size: 1.2em;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
 }
-.icon-btn:hover { background: #555; border-color: #666; }
+.icon-btn:hover {
+  background: #555;
+  border-color: #777;
+  transform: rotate(180deg);
+}
 
-/* 次级按钮 (灰色按钮) */
+/* 次级按钮 */
 .secondary-btn {
   flex: 1;
   background: #3a3a3a;
   color: #ddd;
+  border: 1px solid var(--border-color);
+  padding: 0 12px;
+  height: 38px;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 0.9em;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .secondary-btn:hover {
   background: #4a4a4a;
   border-color: #666;
   color: white;
 }
-.secondary-btn:active {
-  background-color: #2a2a2a;
-}
+.secondary-btn:active { background-color: #2a2a2a; }
 
-/* 主操作按钮 (黄色按钮) */
+/* 主操作按钮 (开始批处理) */
 #start-batch-btn {
   margin-top: 15px;
   padding: 14px;
@@ -289,29 +204,35 @@ label {
   cursor: pointer;
   background-color: var(--nikon-yellow);
   color: #1a1a1a;
-  border: none; /* 主按钮无边框 */
+  border: none;
+  border-radius: 6px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  transition: background-color 0.2s, opacity 0.2s;
 }
-
 #start-batch-btn:hover {
   background-color: #ffd500;
   filter: brightness(1.1);
 }
-#start-batch-btn:active {
-  transform: scale(0.98);
+#start-batch-btn:active { transform: scale(0.98); }
+
+/* 状态控制按钮样式 */
+button.processing-mode {
+    background-color: #7f8c8d !important;
+    opacity: 0.8;
+    cursor: not-allowed;
+    color: white !important;
 }
-#start-batch-btn:disabled {
-  background-color: #444;
-  color: #888;
-  cursor: not-allowed;
-  filter: none;
+button.can-stop {
+    background-color: #e74c3c !important; /* 红色 */
+    opacity: 1;
+    cursor: pointer !important;
+    color: white !important;
 }
 
 /* =========================================
-   5. 拖拽区域与文件列表 (Drop Zone & List)
+   5. 拖拽区域与列表 (Drop Zone)
    ========================================= */
-
 .drop-zone {
   border: 2px dashed #555;
   border-radius: 8px;
@@ -325,37 +246,27 @@ label {
   transition: all 0.2s;
   position: relative;
 }
-
-/* 拖拽激活状态 */
 .drop-zone.active {
   border-color: var(--nikon-yellow);
   background: rgba(255, 225, 0, 0.05);
 }
-
 .drop-zone.has-files {
   justify-content: flex-start;
   align-items: stretch;
 }
-
-/* 空状态提示 */
-#empty-tip {
-  margin-top: 60px;
-  text-align: center;
-  color: #666;
-  font-size: 0.9em;
-  pointer-events: none;
+.drop-zone.disabled {
+    pointer-events: none;
+    opacity: 0.6;
+    filter: grayscale(0.5);
 }
-#empty-tip p { margin: 2px 0; }
 
-/* 列表容器 */
+/* 列表样式 */
 .file-list {
   width: 100%;
   list-style: none;
   padding: 0;
   margin: 0;
 }
-
-/* 单个列表项 */
 .file-item {
   display: flex;
   justify-content: space-between;
@@ -367,24 +278,23 @@ label {
   animation: fadeIn 0.2s ease-out;
 }
 .file-item:last-child { border-bottom: none; }
-.file-item:hover { background-color: #2a2a2a; } /* 轻微的悬停效果 */
+.file-item:hover { background-color: #2a2a2a; }
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-5px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* 文件信息左侧区域 */
 .file-info {
   display: flex;
-  flex-direction: column; /* 垂直排列 */
-  align-items: flex-start;
+  flex-direction: column;
   gap: 4px;
   flex: 1;
   overflow: hidden; 
   padding-right: 10px;
+  /* 🟢 [新增] 防止子元素（EXIF标签）横向拉伸，强制靠左对齐 */
+  align-items: flex-start;
 }
-
 .file-name {
   white-space: nowrap;
   overflow: hidden;
@@ -392,39 +302,35 @@ label {
   color: #e0e0e0;
   font-weight: 500;
   width: 100%;
-  font-size: 14px;
 }
 
-/* 删除按钮 */
 .remove-item-btn {
-  background: none; 
-  border: none; 
-  cursor: pointer; 
-  color: #666; 
-  font-size: 18px; 
-  padding: 5px;
-  line-height: 1;
-  flex-shrink: 0;
-  transition: color 0.2s;
+  background: none; border: none; cursor: pointer; color: #666; 
+  font-size: 18px; padding: 5px; line-height: 1; flex-shrink: 0;
 }
 .remove-item-btn:hover { color: #ff5555; }
 
-/* 列表底部统计 */
+/* 列表锁定样式 */
+.file-list.disabled-interaction {
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+#empty-tip {
+  margin-top: 60px;
+  text-align: center;
+  color: #666;
+  font-size: 0.9em;
+  pointer-events: none;
+}
 .queue-stats {
-  display: flex; 
-  justify-content: space-between; 
-  font-size: 0.8em; 
-  color: #777; 
-  margin-top: 8px;
-  padding: 0 5px;
+  display: flex; justify-content: space-between; 
+  font-size: 0.8em; color: #777; margin-top: 8px; padding: 0 5px;
 }
 #clear-list-btn {
   background: none; border: none; padding: 0; color: #777; font-size: inherit; cursor: pointer;
 }
-#clear-list-btn:hover {
-  color: #ff5555;
-  text-decoration: underline;
-}
+#clear-list-btn:hover { color: #ff5555; text-decoration: underline; }
 
 /* =========================================
    6. 状态徽章 (Badges)
@@ -438,58 +344,110 @@ label {
   border-radius: 3px;
   text-transform: uppercase;
 }
-
-/* EXIF 正常 */
-.tag-exif.ok {
-  color: var(--status-ok-text); 
-  background-color: var(--status-ok-bg);
-}
-
-/* 无 EXIF (红色警示) */
-.tag-exif.no {
-  color: var(--status-no-text);
-  background-color: var(--status-no-bg);
-}
-
-/* 扫描中 */
-.tag-exif.wait {
-  color: var(--nikon-yellow);
-  background: transparent;
-  animation: blink 1s infinite;
-}
+.tag-exif.ok { color: var(--status-ok-text); background-color: var(--status-ok-bg); }
+.tag-exif.no { color: var(--status-no-text); background-color: var(--status-no-bg); }
+.tag-exif.wait { color: var(--nikon-yellow); background: transparent; animation: blink 1s infinite; }
 @keyframes blink { 50% { opacity: 0.5; } }
 
+
 /* =========================================
-   7. 底部状态、预览与调试
+   7. 底部状态面板 (Status Panel) - 🟢 修复与合并版
    ========================================= */
-#status-container {
+.status-panel {
   margin-top: 20px;
+  background-color: #2c2c2c; /* 改为深色背景以匹配整体 */
+  border-radius: 8px;
+  padding: 12px 16px;
+  width: 100%;
+  max-width: 420px; /* 与上方的 control-group 对齐 */
+  
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+/* 左侧 Spinner 容器 */
+.spinner-wrapper {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
-  gap: 10px;
 }
 
-#status {
-  font-size: 0.9em;
-  color: #888;
-  margin: 0;
-}
-
-/* 加载动画 */
+/* 统一的加载动画 */
 .spinner {
-  display: none;
   width: 18px;
   height: 18px;
-  border: 3px solid #555;
-  border-top: 3px solid var(--nikon-yellow);
+  border: 2px solid #555;
+  border-top-color: var(--nikon-yellow); /* 统一使用黄色 */
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s linear infinite;
+  box-sizing: border-box; /* 确保边框计算在内 */
 }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-/* 预览弹窗 */
+/* 右侧内容区 */
+.status-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.status-text {
+  font-size: 13px;
+  color: #ccc; /* 浅灰色文字 */
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+/* 进度条区域 */
+.progress-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.progress-track {
+  flex-grow: 1;
+  height: 6px;
+  background-color: #444; /* 深色轨道 */
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background-color: var(--progress-green);
+  transition: width 0.2s ease-out;
+}
+
+.progress-info {
+  font-size: 12px;
+  color: #888;
+  /* 🟢 [新增] 继承全局字体(Inter)，但开启等宽数字特性(防止数字跳动) */
+  font-family: inherit; 
+  font-variant-numeric: tabular-nums;
+  min-width: 80px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+
+/* =========================================
+   8. 预览与调试 (Preview & Debug)
+   ========================================= */
 #preview-modal {
   display: none;
   position: fixed;
@@ -499,7 +457,6 @@ label {
   justify-content: center; align-items: center; flex-direction: column;
   backdrop-filter: blur(5px);
 }
-
 .preview-container {
   position: relative;
   width: 90%; height: 80%;
@@ -512,14 +469,12 @@ label {
   display: flex;
   justify-content: center; align-items: center;
 }
-
 #preview-img {
   max-width: 100%; max-height: 100%;
   box-shadow: 0 20px 50px rgba(0,0,0,0.8);
   user-select: none;
   -webkit-user-drag: none;
 }
-
 #close-preview-btn {
   margin-top: 25px;
   background: transparent;
@@ -528,39 +483,13 @@ label {
   padding: 10px 40px;
   border-radius: 30px;
   cursor: pointer;
-  font-size: 1em;
 }
-#close-preview-btn:hover {
-  border-color: white; color: white;
-  background: rgba(255,255,255,0.1);
-}
+#close-preview-btn:hover { border-color: white; color: white; background: rgba(255,255,255,0.1); }
 
-/* 调试工具栏 */
 .debug-tools {
   margin-top: 20px; 
   border-top: 1px solid #333; 
   padding-top: 15px;
   width: 100%;
+  max-width: 420px;
 }
-
-/* 当批处理进行时，锁定列表区域 */
-.disabled-interaction {
-    pointer-events: none;
-    opacity: 0.6;
-    filter: grayscale(0.5);
-}
-
-/* 按钮处于不可停止状态 */
-button.processing-mode {
-    background-color: #7f8c8d; /* 灰色 */
-    opacity: 0.8;
-}
-
-/* 按钮处于可停止状态 (3秒后) */
-button.can-stop {
-    background-color: #e74c3c; /* 红色 */
-    opacity: 1;
-    transition: background-color 0.3s;
-}
-
-

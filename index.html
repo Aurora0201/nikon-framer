@@ -77,16 +77,25 @@
     <button id="start-batch-btn">开始批处理 (Start Batch)</button>
   </div>
   
-  <div id="status-container">
-    <div id="loading-spinner" class="spinner"></div>
-    <div id="progress-container" style="display: none; width: 100%; margin-bottom: 8px;">
-      <div style="background: #e0e0e0; height: 8px; border-radius: 4px; overflow: hidden;">
-        <div id="progress-fill" style="background: #4caf50; height: 100%; width: 0%; transition: width 0.2s;"></div>
-      </div>
-      <div id="progress-text" style="text-align: right; font-size: 12px; color: #666; margin-top: 2px;">0%</div>
-    </div>
-    <p id="status">准备就绪，请添加照片。</p>
+  <div id="status-container" class="status-panel">
+  
+  <div class="spinner-wrapper">
+    <div id="loading-spinner" class="spinner" style="display: none;"></div>
   </div>
+
+  <div class="status-content">
+    
+    <div id="status" class="status-text">准备就绪，请添加照片。</div>
+
+    <div id="progress-container" class="progress-area" style="display: none;">
+      <div class="progress-track">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+      <div id="progress-text" class="progress-info">0%</div>
+    </div>
+    
+  </div>
+</div>
 
   <div id="preview-modal">
     <div class="preview-container">
