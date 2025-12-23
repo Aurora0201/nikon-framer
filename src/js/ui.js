@@ -10,17 +10,36 @@ export function setStatus(text, type = "normal") {
   else el.status.style.color = "#333";
 }
 
+// 🟢 [修复版] toggleLoading
 export function toggleLoading(isLoading) {
-  if (isLoading) {
-    el.loadingSpinner.style.display = "block";
-    el.btn.disabled = true;
-    if(el.debugShadowBtn) el.debugShadowBtn.disabled = true;
-    if(el.debugWeightBtn) el.debugWeightBtn.disabled = true;
-  } else {
-    el.loadingSpinner.style.display = "none";
-    el.btn.disabled = false;
-    if(el.debugShadowBtn) el.debugShadowBtn.disabled = false;
-    if(el.debugWeightBtn) el.debugWeightBtn.disabled = false;
+  // 1. 显示/隐藏 loading 动画
+  if (el.loadingSpinner) {
+    el.loadingSpinner.style.display = isLoading ? "block" : "none";
+  }
+
+  // 2. 禁用所有交互元素，但要排除掉 "start-batch-btn"
+  // 这样用户才能在处理过程中点击它来“终止”
+  const interactables = document.querySelectorAll('input, select, button'); 
+  interactables.forEach(item => {
+    // 如果是批处理按钮，且当前是 loading 状态，我们不禁用它
+    // (因为主逻辑里把它变成了“终止”按钮)
+    if (item.id === 'start-batch-btn' || item === el.startBatchBtn) {
+        return; 
+    }
+    
+    // 其他所有按钮/输入框根据状态禁用/启用
+    item.disabled = isLoading;
+  });
+
+  // 3. 视觉反馈 (容器变灰)
+  if (el.dropZone) {
+    if (isLoading) el.dropZone.classList.add('disabled');
+    else el.dropZone.classList.remove('disabled');
+  }
+  
+  if (el.fileList) {
+    if (isLoading) el.fileList.classList.add('disabled-interaction');
+    else el.fileList.classList.remove('disabled-interaction');
   }
 }
 

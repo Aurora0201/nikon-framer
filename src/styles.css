@@ -542,3 +542,23 @@ label {
   padding-top: 15px;
   width: 100%;
 }
+
+/* 当批处理进行时，锁定列表区域 */
+.disabled-interaction {
+    pointer-events: none;
+    opacity: 0.6;
+    filter: grayscale(0.5);
+}
+
+/* 按钮处于不可停止状态 */
+button.processing-mode {
+    background-color: #7f8c8d; /* 灰色 */
+    opacity: 0.8;
+}
+
+/* 按钮处于可停止状态 (3秒后) */
+button.can-stop {
+    background-color: #e74c3c; /* 红色 */
+    opacity: 1;
+    transition: background-color 0.3s;
+}
