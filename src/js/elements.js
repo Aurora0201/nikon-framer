@@ -30,4 +30,9 @@ export const el = {
   fileList: document.getElementById("file-list"),
   queueCount: document.getElementById("queue-count"),
   clearListBtn: document.getElementById("clear-list-btn"),
+
+  // 🟢 [新增] 进度条组件引用
+  progressContainer: document.getElementById('progress-container'),
+  progressFill: document.getElementById('progress-fill'),
+  progressText: document.getElementById('progress-text'),
 };

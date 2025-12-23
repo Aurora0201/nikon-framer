@@ -10,36 +10,40 @@ export function setStatus(text, type = "normal") {
   else el.status.style.color = "#333";
 }
 
-// 🟢 [修复版] toggleLoading
+// 🟢 [修改] toggleLoading：加入进度条显隐控制
 export function toggleLoading(isLoading) {
-  // 1. 显示/隐藏 loading 动画
+  // 1. Loading 遮罩
   if (el.loadingSpinner) {
     el.loadingSpinner.style.display = isLoading ? "block" : "none";
   }
 
-  // 2. 禁用所有交互元素，但要排除掉 "start-batch-btn"
-  // 这样用户才能在处理过程中点击它来“终止”
+  // 2. 进度条容器控制
+  if (el.progressContainer) {
+    if (isLoading) {
+      el.progressContainer.style.display = "block";
+      updateProgress(0, 1); // 重置进度
+    } else {
+      setTimeout(() => {
+        el.progressContainer.style.display = "none";
+        // 重置宽度，视觉上归零
+        if (el.progressFill) el.progressFill.style.width = "0%";
+      }, 1500);
+    }
+  }
+
+  // 3. 禁用交互 (排除 start-batch-btn)
   const interactables = document.querySelectorAll('input, select, button'); 
   interactables.forEach(item => {
-    // 如果是批处理按钮，且当前是 loading 状态，我们不禁用它
-    // (因为主逻辑里把它变成了“终止”按钮)
-    if (item.id === 'start-batch-btn' || item === el.startBatchBtn) {
-        return; 
-    }
-    
-    // 其他所有按钮/输入框根据状态禁用/启用
+    if (item.id === 'start-batch-btn' || item === el.startBatchBtn) return;
     item.disabled = isLoading;
   });
 
-  // 3. 视觉反馈 (容器变灰)
+  // 4. 视觉反馈
   if (el.dropZone) {
-    if (isLoading) el.dropZone.classList.add('disabled');
-    else el.dropZone.classList.remove('disabled');
+     el.dropZone.classList.toggle('disabled', isLoading);
   }
-  
   if (el.fileList) {
-    if (isLoading) el.fileList.classList.add('disabled-interaction');
-    else el.fileList.classList.remove('disabled-interaction');
+     el.fileList.classList.toggle('disabled-interaction', isLoading);
   }
 }
 
@@ -142,4 +146,19 @@ function updateItemStatus(index, status) {
     tag.className = `tag-exif ${status}`;
     tag.innerText = getExifLabel(status);
   }
+}
+
+
+// 🟢 [标准版] 更新进度条逻辑
+export function updateProgress(current, total) {
+  // 1. 安全检查：确保元素在 elements.js 中已正确获取
+  if (!el.progressFill || !el.progressText) return;
+  if (total <= 0) return;
+
+  // 2. 计算逻辑
+  const percentage = Math.round((current / total) * 100);
+
+  // 3. 更新 DOM (使用缓存的引用)
+  el.progressFill.style.width = `${percentage}%`;
+  el.progressText.innerText = `${current} / ${total} (${percentage}%)`;
 }

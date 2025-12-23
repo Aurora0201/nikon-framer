@@ -7,7 +7,7 @@ import { el } from './js/elements.js';
 import { processImage, debugShadowGrid, debugWeightGrid } from './js/commands.js';
 import { loadFonts, initFontEvents } from './js/fonts.js';
 import { initPreviewInteraction } from './js/preview.js';
-import { initUIEvents, setStatus, toggleLoading, showPreview, renderFileList } from './js/ui.js';
+import { initUIEvents, setStatus, toggleLoading, showPreview, renderFileList, updateProgress } from './js/ui.js';
 import { fileQueue } from './js/state.js';
 
 // 🔴 关键：彻底屏蔽浏览器的默认拖拽行为
@@ -44,7 +44,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     }
 
     // 💡 这里可以扩展真正的进度条 UI
-    // updateProgressBar(current, total); 
+    updateProgress(current, total); 
   });
 
   // 监听状态改变 (完成或停止)
