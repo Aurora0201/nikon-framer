@@ -1,30 +1,32 @@
 <script setup>
-import HelloWorld from './components/HelloWorld.vue'
+// 引入所有组件
+import ControlPanel from './components/ControlPanel.vue';
+import FileList from './components/FileList.vue';
+import StatusBar from './components/StatusBar.vue';
+import PreviewModal from './components/PreviewModal.vue';
+import DebugTools from './components/DebugTools.vue';
+
+// 暂时还没写逻辑，先放个空壳
 </script>
 
 <template>
-  <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://vuejs.org/" target="_blank">
-      <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-    </a>
+  <h1>NIKON <span>Z</span> FRAMER</h1>
+
+  <div class="control-group">
+    <ControlPanel />
+    
+    <FileList />
+
+    <button id="start-batch-btn">开始批处理 (Start Batch)</button>
   </div>
-  <HelloWorld msg="Vite + Vue" />
+  
+  <StatusBar />
+
+  <PreviewModal />
+
+  <DebugTools />
 </template>
 
 <style scoped>
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
-}
+/* 这里可以写针对 App 布局的特定样式，目前用全局样式的就够了 */
 </style>
