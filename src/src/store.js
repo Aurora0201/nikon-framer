@@ -5,6 +5,8 @@ export const store = reactive({
   // --- 核心数据 ---
   fileQueue: [],      // 文件列表
   isProcessing: false, // 是否正在处理
+  // 🟢 [新增] 全局拖拽状态 UI 控制
+  isDragging: false,
   
   // --- 进度与状态 ---
   progress: {
