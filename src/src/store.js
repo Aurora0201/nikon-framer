@@ -25,6 +25,8 @@ export const store = reactive({
     shadowIntensity: 1.0
   },
 
+  // 🟢 [新增] 字体列表缓存
+  fontList: [],
   // --- 动作 (Actions) ---
   // 添加文件
   addFiles(newFiles) {
@@ -67,5 +69,10 @@ export const store = reactive({
     this.progress.current = current;
     this.progress.total = total;
     this.progress.percent = total > 0 ? Math.round((current / total) * 100) : 0;
+  },
+
+  // 🟢 [新增] 更新字体列表
+  setFonts(fonts) {
+    this.fontList = fonts;
   }
 });
