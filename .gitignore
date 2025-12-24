@@ -24,3 +24,4 @@ src-tauri/gen
 *.sln
 *.sw?
 abstract.py
+src_backup
