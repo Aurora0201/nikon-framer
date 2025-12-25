@@ -80,7 +80,7 @@ watch(() => store.fileQueue, async (newQueue) => {
       // 标记为 scanning 防止重复检查
       file.exifStatus = 'scanning'; 
       try {
-        const isOk = await invoke('check_exif', { path: file.path });
+        const isOk = await invoke('check_file_exif', { path: file.path });
         file.exifStatus = isOk ? 'ok' : 'no';
       } catch (e) {
         file.exifStatus = 'no';
