@@ -4,12 +4,8 @@ pub mod white;
 pub mod blur;
 pub mod traits;
 
-use std::path::Path;
-use std::io::Cursor;
-
 // 🟢 修改点：引入 ImageFormat，去掉 ImageOutputFormat (为了兼容性)
-use image::{DynamicImage, ImageBuffer, Rgba, imageops, ImageFormat};
-use base64::{Engine as _, engine::general_purpose};
+use image::{DynamicImage, ImageBuffer, Rgba, imageops};
 use ab_glyph::FontRef; 
 
 use crate::models::{StyleOptions, FontConfig};
