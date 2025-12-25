@@ -63,21 +63,6 @@ pub fn load_font_data(font_filename: &str) -> Vec<u8> {
     }
 }
 
-// ... (load_logo_image 和 load_brand_logos 保持不变) ...
-pub fn load_logo_image(make: &str) -> Option<DynamicImage> {
-    let make_upper = make.to_uppercase();
-    let logo_data = if make_upper.contains("NIKON") {
-        Some(include_bytes!("../assets/logos/Nikon.png") as &[u8])
-    } else {
-        None
-    };
-
-    if let Some(data) = logo_data {
-        image::load_from_memory_with_format(data, ImageFormat::Png).ok()
-    } else {
-        None
-    }
-}
 
 pub struct BrandLogos {
     pub icon: Option<DynamicImage>,

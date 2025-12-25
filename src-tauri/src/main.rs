@@ -6,7 +6,7 @@ mod debug;
 mod graphics;
 mod models;
 
-use metadata::PhotoMetadata;
+
 use std::time::Instant; // 🟢 移除了未使用的 Duration
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}}; 
 // 🟢 下面这行是关键修复：引入了 Emitter，移除了未使用的 Manager
