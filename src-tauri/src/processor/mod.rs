@@ -2,14 +2,14 @@
 
 pub mod white;
 pub mod blur;
-
-use std::path::Path;
-use std::io::Cursor;
+pub mod traits;
 
 // 🟢 修改点：引入 ImageFormat，去掉 ImageOutputFormat (为了兼容性)
-use image::{DynamicImage, ImageBuffer, Rgba, imageops, ImageFormat};
-use base64::{Engine as _, engine::general_purpose};
+use image::{DynamicImage, ImageBuffer, Rgba, imageops};
 use ab_glyph::FontRef; 
+
+use crate::models::{StyleOptions, FontConfig};
+use crate::processor::traits::FrameProcessor;
 
 // 引用 resources 模块
 use crate::resources; 
@@ -22,10 +22,6 @@ pub struct DrawContext<'a> {
 
 pub fn resize_image_by_height(img: &DynamicImage, target_height: u32) -> DynamicImage {
     img.resize(target_height * 10, target_height, imageops::FilterType::Lanczos3)
-}
-
-pub fn format_model_text(model: &str) -> String {
-    model.replace("Z", "ℤ")
 }
 
 // 🟢 修复点：添加了缺失的分号，并补全了完整逻辑
@@ -60,55 +56,86 @@ pub fn clean_model_name(make: &str, model: &str) -> String {
     no_make
 }
 
-// 🚀 主入口
-pub fn run(
-    file_path: String, 
-    style: String, 
-    font_filename: String, 
-    font_weight: String, 
-    shadow_intensity: f32,
-    camera_make: String,
-    camera_model: String,
-    shooting_params: String
-) -> Result<String, String> {
-    
-    // 1. 打开图片
-    let img = image::open(&file_path).map_err(|e| format!("打开图片失败: {}", e))?;
 
-    // 2. 加载资源
-    let font_data = resources::load_font_data(&font_filename);
-    let font = FontRef::try_from_slice(&font_data).map_err(|_| "字体加载错误")?;
-    let logos = resources::load_brand_logos(&camera_make);
 
-    // 3. 核心处理
-    let final_image = match style.as_str() {
-        "BottomWhite" => white::process(&img, &camera_make, &camera_model, &shooting_params, &font, &font_weight, &logos),
-        "GaussianBlur" => blur::process(&img, &camera_make, &camera_model, &shooting_params, &font, &font_weight, shadow_intensity, &logos),
-        _ => return Err("未知的样式".to_string()),
-    };
+// --- 策略 1: 白底处理器 ---
+struct BottomWhiteProcessor {
+    font_config: FontConfig,
+}
 
-    // 4. 保存文件
-    let path_obj = Path::new(&file_path);
-    let file_stem = path_obj.file_stem().ok_or("无效文件名")?.to_string_lossy();
-    let parent = path_obj.parent().ok_or("无效目录")?;
-    
-    // 生成文件名：原名_BottomWhite.jpg
-    let new_filename = format!("{}_{}.jpg", file_stem, style);
-    let output_path = parent.join(new_filename);
-    
-    let rgb_final = final_image.to_rgb8();
-    rgb_final.save(&output_path).map_err(|e| format!("保存失败: {}", e))?;
-    println!("✅ 已保存: {:?}", output_path);
-
-    // 5. 编码 Base64 预览
-    let mut buffer = Cursor::new(Vec::new());
-    
-    // 🟢 修复点：使用 ImageFormat::Jpeg，而不是 ImageOutputFormat
-    // 这样兼容性最好，使用默认质量
-    rgb_final.write_to(&mut buffer, ImageFormat::Jpeg)
-        .map_err(|e| format!("预览生成失败: {}", e))?;
+impl FrameProcessor for BottomWhiteProcessor {
+    fn process(&self, img: &DynamicImage, make: &str, model: &str, params: &str) -> Result<DynamicImage, String> {
+        // 1. 加载资源 (字体 & Logo)
+        // 注意：这里每次处理都加载了一次资源。
+        // 如果追求极致性能，可以将 font_data 缓存到 Struct 中，但涉及生命周期会变复杂，目前这样足够快。
+        let font_data = resources::load_font_data(&self.font_config.filename);
+        let font = FontRef::try_from_slice(&font_data).map_err(|_| "字体文件解析失败")?;
         
-    let base64_str = general_purpose::STANDARD.encode(buffer.get_ref());
+        // 根据相机厂商加载对应的 Logo 集合
+        let logos = resources::load_brand_logos(make);
 
-    Ok(format!("data:image/jpeg;base64,{}", base64_str))
+
+        // 🟢 修复：假设 blur::process 直接返回 DynamicImage
+        // 我们需要手动把它包裹在 Ok() 里以符合 Result 返回值要求
+        let result_img = white::process(
+            img, 
+            make, 
+            model, 
+            params, 
+            &font, 
+            &self.font_config.weight,
+            &logos
+        ); 
+        
+        // 如果 blur::process 可能会 panic 而不是返回 Result，这里直接 Ok 包裹
+        Ok(result_img)
+    }
+}
+
+// --- 策略 2: 模糊处理器 ---
+struct BlurProcessor {
+    font_config: FontConfig,
+    shadow: f32,
+}
+
+impl FrameProcessor for BlurProcessor {
+    fn process(&self, img: &DynamicImage, make: &str, model: &str, params: &str) -> Result<DynamicImage, String> {
+        let font_data = resources::load_font_data(&self.font_config.filename);
+        let font = FontRef::try_from_slice(&font_data).map_err(|_| "字体文件解析失败")?;
+        let logos = resources::load_brand_logos(make);
+
+        // 🟢 修复：假设 blur::process 直接返回 DynamicImage
+        // 我们需要手动把它包裹在 Ok() 里以符合 Result 返回值要求
+        let result_img = blur::process(
+            img, 
+            make, 
+            model, 
+            params, 
+            &font, 
+            &self.font_config.weight, 
+            self.shadow, 
+            &logos
+        ); 
+        
+        // 如果 blur::process 可能会 panic 而不是返回 Result，这里直接 Ok 包裹
+        Ok(result_img)
+    }
+}
+
+// --- 🏭 工厂函数：根据枚举创建对应的处理器 ---
+pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor> {
+    match options {
+        StyleOptions::BottomWhite { font } => {
+            Box::new(BottomWhiteProcessor { 
+                font_config: font.clone() 
+            })
+        },
+        StyleOptions::GaussianBlur { font, shadow_intensity } => {
+            Box::new(BlurProcessor { 
+                font_config: font.clone(),
+                shadow: *shadow_intensity 
+            })
+        },
+        
+    }
 }

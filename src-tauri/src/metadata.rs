@@ -1,16 +1,7 @@
-use serde::Serialize;
 use std::fs;
 use std::io::BufReader;
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PhotoMetadata {
-    pub model: String,
-    pub f_number: String,
-    pub exposure_time: String,
-    pub iso: String,
-    pub focal_length: String,
-}
+
 
 // 🟢 修改返回值：(Make, Model, Params)
 pub fn get_exif_string_tuple(path: &str) -> (String, String, String) {

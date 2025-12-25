@@ -3,6 +3,46 @@ import { ref, computed, onUnmounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { store } from '../store.js';
 
+// 🟢 新增辅助函数：根据不同模式，组装不同的参数对象
+function buildBatchContext() {
+  const currentStyle = store.settings.style; // 例如 "BottomWhite" 或 "GaussianBlur"
+
+  // 1. 公共参数：字体配置
+  const fontConfig = {
+    filename: store.settings.font,
+    weight: store.settings.weight
+  };
+
+  // 2. 根据样式名称，构建不同的对象结构 (对应 Rust 的 Enum)
+  switch (currentStyle) {
+    case 'BottomWhite':
+      return {
+        style: 'BottomWhite', // 对应 Rust Enum 的变体名
+        font: fontConfig
+        // 白底模式不需要其他参数
+      };
+
+    case 'GaussianBlur':
+      return {
+        style: 'GaussianBlur',
+        font: fontConfig,
+        // 只有模糊模式才传这个参数
+        shadowIntensity: parseFloat(store.settings.shadowIntensity) || 0.0
+      };
+
+    // 未来扩展：
+    // case 'FilmParams':
+    //   return { style: 'FilmParams', iso: 400, showDate: true };
+
+    default:
+      console.warn("未知的样式，回退到默认参数");
+      return {
+        style: 'BottomWhite',
+        font: fontConfig
+      };
+  }
+}
+
 export function useBatchProcess() {
   const canStop = ref(false);
   let stopTimer = null;
@@ -39,14 +79,13 @@ export function useBatchProcess() {
       return;
     }
 
-    // 准备参数
-    const payload = {
-      filePaths: store.fileQueue.map(f => f.path),
-      style: store.settings.style,
-      fontFilename: store.settings.font,
-      fontWeight: store.settings.weight,
-      shadowIntensity: parseFloat(store.settings.shadowIntensity) || 0.0
-    };
+    // 🟢 1. 获取文件路径
+    const filePaths = store.fileQueue.map(f => f.path);
+
+    // 🟢 2. 动态构建 Context (使用上面的辅助函数)
+    // 这里生成的对象结构，完全匹配 Rust 的 Enum 定义
+    const contextPayload = buildBatchContext();
+    console.log("📦 [V2] 准备发送 Context:", contextPayload);
 
     // 更新状态
     store.isProcessing = true;
@@ -62,7 +101,10 @@ export function useBatchProcess() {
 
     // 调用后端
     try {
-      await invoke('start_batch_process', payload);
+      await invoke('start_batch_process_v2', {
+        filePaths: filePaths,
+        context: contextPayload
+      });
     } catch (error) {
       console.error("启动异常:", error);
       store.isProcessing = false;

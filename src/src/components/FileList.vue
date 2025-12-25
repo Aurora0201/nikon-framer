@@ -7,6 +7,12 @@ import { store } from '../store.js';
 const isDragging = ref(false);
 const dragCounter = ref(0);
 
+const formatPaths = (paths) => {
+  return paths.map(path => ({
+    name: path.replace(/^.*[\\/]/, ''),
+    path: path
+  }));
+};
 
 // --- 动作：添加文件 ---
 const addFiles = async () => {
@@ -19,12 +25,10 @@ const addFiles = async () => {
     });
     
     if (selected) {
+      console.log('添加文件', selected)
       // 这里的 selected 就是文件路径数组
       // 我们需要把它构造成对象格式 { name: 'xxx', path: 'xxx' }
-      const files = selected.map(path => ({
-        name: path.replace(/^.*[\\/]/, ''), // 提取文件名
-        path: path
-      }));
+      const files = formatPaths(selected)
       
       const addedCount = store.addFiles(files);
       if (addedCount > 0) {
@@ -55,9 +59,10 @@ const addFolder = async () => {
       // 🟢 调用 Rust 后端扫描文件夹
       // 注意：Rust 返回的可能已经是 struct { name, path } 或者只是 path
       // 假设 Rust 返回的是对象数组 (根据你之前的逻辑)
-      const files = await invoke('scan_folder', { folderPath });
+      const rawfiles = await invoke('scan_folder', { folderPath });
 
-      if (files && files.length > 0) {
+      if (rawfiles && rawfiles.length > 0) {
+        const files = formatPaths(rawfiles);
         const addedCount = store.addFiles(files);
         store.setStatus(`成功添加 ${addedCount} 张照片`, 'success');
       } else {
