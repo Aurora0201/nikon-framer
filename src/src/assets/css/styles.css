@@ -247,8 +247,10 @@ button.can-stop {
   position: relative;
 }
 .drop-zone.active {
-  border-color: var(--nikon-yellow);
-  background: rgba(255, 225, 0, 0.05);
+  pointer-events: none !important;
+  border-color: var(--nikon-yellow); /* 黄色边框 */
+  background-color: rgba(255, 225, 0, 0.15) !important; /* 🟡 明显的黄色半透明背景 */
+  transform: scale(1.01); /* 微弱放大，增加反馈感 */
 }
 .drop-zone.has-files {
   justify-content: flex-start;
