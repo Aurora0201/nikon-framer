@@ -1,12 +1,13 @@
 use std::io::Cursor;
 use std::time::Instant;
-use image::{DynamicImage, ImageBuffer, Rgba, imageops};
+use image::{DynamicImage, ImageBuffer, Rgba, imageops, ImageFormat};
 use base64::{Engine as _, engine::general_purpose};
 use imageproc::drawing::draw_text_mut; // 🟢 去掉了 draw_filled_rect_mut
 use imageproc::rect::Rect;
 use ab_glyph::{FontRef, PxScale};
+use crate::{models::BatchContext, processor, metadata, graphics};
 
-use crate::graphics;
+
 
 pub fn generate_shadow_grid() -> Result<String, String> {
     let t_start = Instant::now();
@@ -115,4 +116,55 @@ pub fn generate_weight_grid() -> Result<String, String> {
     rgb_canvas.write_to(&mut buffer, image::ImageFormat::Jpeg).map_err(|e| format!("生成失败: {}", e))?;
     let base64_str = general_purpose::STANDARD.encode(buffer.get_ref());
     Ok(format!("data:image/jpeg;base64,{}", base64_str))
+}
+
+
+/// **调试命令：处理单张图片并返回 Base64**
+/// 
+/// 逻辑：
+/// 1. 读取图片
+/// 2. 读取元数据
+/// 3. 使用当前的 Context 创建处理器 (复用生产环境逻辑)
+/// 4. 处理图片
+/// 5. 将结果写入内存缓冲区 -> 转 Base64 -> 返回前端
+#[tauri::command]
+pub async fn debug_process_image(
+    path: String,
+    context: BatchContext,
+) -> Result<String, String> {
+    println!("🧪 [Debug] 正在预览: {} (模式: {:?})", path, context.options);
+
+    // 使用 spawn_blocking 避免阻塞异步线程
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        // 1. 打开图片
+        let img = image::open(&path).map_err(|e| format!("无法打开图片: {}", e))?;
+
+        // 2. 获取元数据 (复用 metadata 模块)
+        let (make, model, params) = metadata::get_exif_string_tuple(&path);
+
+        // 3. 创建处理器 (复用 processor 工厂)
+        // 🟢 关键：这保证了 Debug 结果与实际批处理结果完全一致
+        let proc = processor::create_processor(&context.options);
+
+        // 4. 处理图片
+        let processed_img = proc.process(&img, &make, &model, &params)?;
+
+        // 5. 写入内存缓冲区 (而不是硬盘)
+        let mut buffer = Cursor::new(Vec::new());
+        // 使用 JPEG 格式，质量 85，平衡速度和预览质量
+        processed_img.write_to(&mut buffer, ImageFormat::Jpeg)
+            .map_err(|e| format!("图片编码失败: {}", e))?;
+
+        // 6. 转 Base64
+        let base64_str = general_purpose::STANDARD.encode(buffer.get_ref());
+        
+        // 返回带有 Data URI Scheme 的字符串
+        Ok(format!("data:image/jpeg;base64,{}", base64_str))
+    }).await;
+
+    // 处理线程结果
+    match result {
+        Ok(inner_result) => inner_result,
+        Err(e) => Err(format!("线程崩溃: {}", e)),
+    }
 }
