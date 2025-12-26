@@ -5,15 +5,17 @@ pub mod blur;
 pub mod traits;
 pub mod master;
 
-// 🟢 修改点：引入 ImageFormat，去掉 ImageOutputFormat (为了兼容性)
+use std::sync::Arc; // 🟢 引入 Arc 用于共享只读资源
 use image::{DynamicImage, ImageBuffer, Rgba, imageops};
 use ab_glyph::FontRef; 
 
-use crate::models::{StyleOptions, FontConfig};
+use crate::models::StyleOptions;
 use crate::processor::traits::FrameProcessor;
 
-// 引用 resources 模块
-use crate::resources; 
+// 🟢 引入重构后的 resources 模块 (包含 FontFamily, FontWeight)
+use crate::resources::{self, FontFamily, FontWeight};
+
+// --- 公共辅助结构与函数 ---
 
 pub struct DrawContext<'a> {
     pub canvas: &'a mut ImageBuffer<Rgba<u8>, Vec<u8>>,
@@ -25,7 +27,6 @@ pub fn resize_image_by_height(img: &DynamicImage, target_height: u32) -> Dynamic
     img.resize(target_height * 10, target_height, imageops::FilterType::Lanczos3)
 }
 
-// 🟢 修复点：添加了缺失的分号，并补全了完整逻辑
 pub fn clean_model_name(make: &str, model: &str) -> String {
     let make_clean = make.replace("CORPORATION", "").trim().to_string(); 
     let model_upper = model.to_uppercase();
@@ -38,7 +39,7 @@ pub fn clean_model_name(make: &str, model: &str) -> String {
         rest.trim().to_string()
     } else {
         model.to_string()
-    }; // 🟢 之前报错就是这里少了这个分号！
+    }; 
 
     // 去除 NIKON 前缀
     let mut no_make = if model_base.to_uppercase().starts_with("NIKON") {
@@ -57,109 +58,85 @@ pub fn clean_model_name(make: &str, model: &str) -> String {
     no_make
 }
 
-
-
-// --- 策略 1: 白底处理器 ---
+// ==========================================
+// 策略 1: 白底处理器 (BottomWhite)
+// ==========================================
 struct BottomWhiteProcessor {
-    font_config: FontConfig,
+    // 🟢 使用 Arc<Vec<u8>>，直接指向全局缓存，零拷贝
+    pub font_data: Arc<Vec<u8>>,
 }
 
 impl FrameProcessor for BottomWhiteProcessor {
     fn process(&self, img: &DynamicImage, make: &str, model: &str, params: &str) -> Result<DynamicImage, String> {
-        // 1. 加载资源 (字体 & Logo)
-        // 注意：这里每次处理都加载了一次资源。
-        // 如果追求极致性能，可以将 font_data 缓存到 Struct 中，但涉及生命周期会变复杂，目前这样足够快。
-        let font_data = resources::load_font_data(&self.font_config.filename);
-        let font = FontRef::try_from_slice(&font_data).map_err(|_| "字体文件解析失败")?;
+        // 直接从 Arc 内存中解析 FontRef
+        let font = FontRef::try_from_slice(&self.font_data)
+            .map_err(|_| "白底模式: 标准字体解析失败")?;
         
-        // 根据相机厂商加载对应的 Logo 集合
         let logos = resources::load_brand_logos(make);
-
-
-        // 🟢 修复：假设 blur::process 直接返回 DynamicImage
-        // 我们需要手动把它包裹在 Ok() 里以符合 Result 返回值要求
-        let result_img = white::process(
-            img, 
-            make, 
-            model, 
-            params, 
-            &font, 
-            &self.font_config.weight,
-            &logos
-        ); 
         
-        // 如果 blur::process 可能会 panic 而不是返回 Result，这里直接 Ok 包裹
-        Ok(result_img)
+        // 白底模式强制使用 Bold
+        Ok(white::process(img, make, model, params, &font, "Bold", &logos))
     }
 }
 
-// --- 策略 2: 模糊处理器 ---
-struct BlurProcessor {
-    font_config: FontConfig,
-    shadow: f32,
+// ==========================================
+// 策略 2: 模糊处理器 (Blur)
+// ==========================================
+pub struct BlurProcessor {
+    // 🟢 使用 Arc
+    pub font_data: Arc<Vec<u8>>,
+    pub shadow: f32,
 }
 
 impl FrameProcessor for BlurProcessor {
     fn process(&self, img: &DynamicImage, make: &str, model: &str, params: &str) -> Result<DynamicImage, String> {
-        let font_data = resources::load_font_data(&self.font_config.filename);
-        let font = FontRef::try_from_slice(&font_data).map_err(|_| "字体文件解析失败")?;
+        let font = FontRef::try_from_slice(&self.font_data)
+            .map_err(|_| "模糊模式: 标准字体解析失败")?;
+            
         let logos = resources::load_brand_logos(make);
-
-        // 🟢 修复：假设 blur::process 直接返回 DynamicImage
-        // 我们需要手动把它包裹在 Ok() 里以符合 Result 返回值要求
-        let result_img = blur::process(
-            img, 
-            make, 
-            model, 
-            params, 
-            &font, 
-            &self.font_config.weight, 
-            self.shadow, 
-            &logos
-        ); 
         
-        // 如果 blur::process 可能会 panic 而不是返回 Result，这里直接 Ok 包裹
-        Ok(result_img)
+        Ok(blur::process(img, make, model, params, &font, "Bold", self.shadow, &logos))
     }
 }
 
-/// **Master Style Processor**
-///
-/// 大师模式处理器结构体。
-/// 只包含字体配置，不包含模糊/阴影参数（使用内部默认值）。
+// ==========================================
+// 策略 3: 大师处理器 (Master)
+// ==========================================
 pub struct MasterProcessor {
-    pub main_font_config: FontConfig,
-    // 🟢 新增：缓存字体数据 (Heap allocation)
-    // 为什么存 Vec<u8> 而不是 FontRef? 
-    // 因为 FontRef 有生命周期限制，存 Vec<u8> 所有权最简单安全。
-    pub script_font_data: Vec<u8>, 
-    pub serif_font_data: Vec<u8>,  // 用于 MASTER SERIES 等小字
+    // 🟢 持有三个不同字体的 Arc 指针
+    pub main_font: Arc<Vec<u8>>,   // 参数字体
+    pub script_font: Arc<Vec<u8>>, // 手写体
+    pub serif_font: Arc<Vec<u8>>,  // 标题体
 }
 
-// 🟢 关键修复：实现接口
 impl FrameProcessor for MasterProcessor {
-    /// **Implement Process Trait**
-    ///
-    /// 加载资源并调用 master::process 核心逻辑。
-    fn process(&self, img: &DynamicImage, make: &str, model: &str, params: &str) -> Result<DynamicImage, String> {
-        // 1. 加载字体
-        let main_font_data = resources::load_font_data(&self.main_font_config.filename);
-        let main_font = FontRef::try_from_slice(&main_font_data).map_err(|_| "主字体解析失败")?;
-        // 2. 调用 master 模块
-        // 注意：这里没有传 shadow_intensity，符合你的要求
+    fn process(&self, img: &DynamicImage, _make: &str, _model: &str, params: &str) -> Result<DynamicImage, String> {
+        
+        // 1. 解析主字体 (参数数值)
+        let main = FontRef::try_from_slice(&self.main_font)
+            .map_err(|_| "Master模式: 主字体解析失败".to_string())?;
 
-        // 2. 解析缓存的装饰字体
-        // 🟢 优雅点：这里只是从内存解析，极其快速
-        let script_font = FontRef::try_from_slice(&self.script_font_data).unwrap_or(main_font.clone());
-        let serif_font = FontRef::try_from_slice(&self.serif_font_data).unwrap_or(main_font.clone());
+        // 2. 解析手写体 (回退机制：如果失败使用主字体)
+        let script = FontRef::try_from_slice(&self.script_font)
+            .unwrap_or_else(|_| {
+                println!("⚠️ Master模式: 手写体解析失败，回退");
+                main.clone()
+            });
 
-        // 3. 调用绘制
+        // 3. 解析标题体
+        let serif = FontRef::try_from_slice(&self.serif_font)
+            .unwrap_or_else(|_| {
+                println!("⚠️ Master模式: 标题字体解析失败，回退");
+                main.clone()
+            });
+
+        // 4. 绘制
         let result_img = master::process(
             img, 
             params, 
-            &main_font,   // 用于参数
-            &script_font, // 用于 "The decisive moment"
-            &serif_font   // 用于 "MASTER SERIES"
+            &main,   
+            &script, 
+            &serif   
         );
 
         Ok(result_img)
@@ -167,34 +144,40 @@ impl FrameProcessor for MasterProcessor {
 }
 
 
-
-
-/// **Factory Function**
-///
-/// 根据枚举创建对应的处理器实例。
-pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor> {
+// ==========================================
+// 工厂函数: 核心装配车间
+// ==========================================
+pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send + Sync> {
     match options {
-        StyleOptions::BottomWhite { font } => {
+        
+        // 🟢 极简白底模式
+        // 设计决策: 使用 InterDisplay Bold，现代且清晰
+        StyleOptions::BottomWhite => {
             Box::new(BottomWhiteProcessor { 
-                font_config: font.clone() 
+                font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold) 
             })
         },
-        StyleOptions::GaussianBlur { font, shadow_intensity } => {
+
+        // 🟢 高斯模糊模式
+        // 设计决策: 同上，保持一致性
+        StyleOptions::GaussianBlur { shadow_intensity } => {
             Box::new(BlurProcessor { 
-                font_config: font.clone(),
+                font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold),
                 shadow: *shadow_intensity 
             })
         },
-        StyleOptions::Master { font } => {
-            // 🟢 在创建处理器时，一次性把装饰字体加载进内存
-            // 假设文件名是固定的，或者你可以从 options 传入
-            let script_data = resources::load_theme_font("MrDafoe-Regular.ttf"); // 举例
-            let serif_data = resources::load_theme_font("AbhayaLibre-Medium.ttf");  // 举例
 
+        // 🟢 大师模式 (精心搭配的字体组合)
+        StyleOptions::Master => {
             Box::new(MasterProcessor {
-                main_font_config: font.clone(),
-                script_font_data: script_data,
-                serif_font_data: serif_data,
+                // 1. 参数数值: InterDisplay Medium (比 Bold 稍微精致一点，更有高级感)
+                main_font: resources::get_font(FontFamily::InterDisplay, FontWeight::Medium),
+                
+                // 2. 手写体: MrDafoe (艺术签名感)
+                script_font: resources::get_font(FontFamily::MrDafoe, FontWeight::Regular),
+                
+                // 3. 标题小字: AbhayaLibre (衬线体，显得正式、经典)
+                serif_font: resources::get_font(FontFamily::AbhayaLibre, FontWeight::Medium),
             })
         },
         

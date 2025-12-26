@@ -13,6 +13,7 @@ use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use tauri::{State, Window, Emitter}; 
 use crate::models::BatchContext;
 use std::path::Path;
+use tauri::Manager;
 
 
 // --- State Management ---
@@ -165,6 +166,30 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(AppState { should_stop: AtomicBool::new(false) }))
+        .setup(|app| {
+            // 1. 获取 AppHandle
+            let handle = app.handle();
+            
+            // 2. 解析资源路径
+            // 在 Tauri v2 中，资源路径解析通常使用 path() 插件
+            // 如果你的 assets/fonts 配置在 resources 数组里，它们会被放在 Resource 目录下
+            
+            // 注意：resolve 方法的具体路径参数取决于 tauri.conf.json 里的写法
+            // 如果配置是 "assets/fonts/*"，那么在包内部它们通常会被放在 "assets/fonts" 结构下
+            // 使用 BaseDirectory::Resource 来定位
+            
+            use tauri::path::BaseDirectory;
+            
+            let resource_path = handle.path().resolve("assets/fonts", BaseDirectory::Resource)
+                .expect("无法解析字体资源路径");
+
+            println!("🚀 [Setup] 检测到字体资源路径: {:?}", resource_path);
+
+            // 3. 将绝对路径传给 resources 模块
+            resources::init_font_path(resource_path);
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             start_batch_process_v2,
             stop_batch_process,

@@ -1,6 +1,9 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use image::{DynamicImage, ImageFormat};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use once_cell::sync::Lazy;
 
 // 🟢 1. 在这里定义所有内置字体的显示名称
 // 只要文件名传回来是这个，我们就加载 include_bytes! 里的数据
@@ -44,40 +47,6 @@ pub fn get_font_list() -> Vec<String> {
     fonts
 }
 
-// 加载字体数据 (根据名称分流)
-pub fn load_font_data(font_filename: &str) -> Vec<u8> {
-    // 🟢 判断 1: 如果是内置字体名，或者是空的 (第一次启动)，或者是 "default" (旧版兼容)
-    if font_filename == BUILTIN_FONT_NAME || font_filename == "default" || font_filename.is_empty() {
-        // 直接返回编译进二进制的字体数据
-        return include_bytes!("../assets/fonts/InterDisplay-Bold.otf").to_vec();
-    } 
-    
-    // 🟢 判断 2: 否则去读取用户文件夹
-    let custom_path = Path::new("fonts").join(font_filename);
-    match fs::read(&custom_path) {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            println!("⚠️ 无法读取用户字体: {:?}，回退到内置字体。", custom_path);
-            include_bytes!("../assets/fonts/InterDisplay-Bold.otf").to_vec()
-        },
-    }
-}
-
-// 🟢 新增：加载主题专用字体的辅助函数
-// 这里的 font_name 是 resources 目录下的文件名
-pub fn load_theme_font(font_name: &str) -> Vec<u8> {
-    // 这里假设你的字体放在 src-tauri/resources/fonts/ 下
-    // 生产环境中，你应该使用 handle.path_resolver().resource_dir() 来获取路径
-    // 开发环境中，我们可以简单指向相对路径
-    let path = Path::new("assets/fonts").join(font_name);
-    
-    fs::read(&path).unwrap_or_else(|_| {
-        println!("⚠️ 警告: 找不到主题字体 {:?}，回退到默认字体", path);
-        // 如果找不到，为了防止崩溃，可以加载一个默认的 fallback 字体
-        // 或者直接 panic，取决于你的容错策略
-        vec![] 
-    })
-}
 
 pub struct BrandLogos {
     pub icon: Option<DynamicImage>,
@@ -109,4 +78,101 @@ pub fn load_brand_logos(make: &str) -> BrandLogos {
     } else {
         BrandLogos { icon: None, word: None, z_symbol: None }
     }
+}
+
+
+// 🟢 新增：用于存储真实的资源绝对路径
+// 默认是 None，必须在 main.rs 里初始化
+static FONT_BASE_DIR: Lazy<Mutex<Option<PathBuf>>> = Lazy::new(|| {
+    Mutex::new(None)
+});
+
+// 🟢 新增：初始化函数 (将在 main.rs 中调用)
+pub fn init_font_path(path: PathBuf) {
+    let mut dir = FONT_BASE_DIR.lock().unwrap();
+    *dir = Some(path);
+    println!("✅ [Resources] 字体路径已初始化");
+}
+
+
+// 🟢 1. 定义字体家族 (对应你实际拥有的字体系列)
+// 以后加新字体，就在这里加名字，不用管它用来做什么
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FontFamily {
+    InterDisplay,  // 现代无衬线
+    MrDafoe,       // 手写体
+    AbhayaLibre,   // 衬线体
+}
+
+// 🟢 2. 定义字重
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FontWeight {
+    Regular,
+    Medium,
+    Bold,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct FontKey {
+    family: FontFamily,
+    weight: FontWeight,
+}
+
+// 🟢 3. 文件名映射逻辑 (核心配置中心)
+// 根据 Family + Weight -> 找到对应的文件名
+impl FontKey {
+    fn filename(&self) -> &'static str {
+        match (self.family, self.weight) {
+            // --- Inter Display (OTF) ---
+            (FontFamily::InterDisplay, FontWeight::Bold)   => "InterDisplay-Bold.otf",
+            (FontFamily::InterDisplay, FontWeight::Medium) => "InterDisplay-Medium.otf",
+            // Inter 的 fallback: 如果要 Regular 或者其他未定义的，都用 Regular
+            (FontFamily::InterDisplay, _)                  => "InterDisplay-Regular.otf",
+
+            // --- MrDafoe (TTF) ---
+            // 手写体通常只有一种字重，无论要什么都给 Regular
+            (FontFamily::MrDafoe, _) => "MrDafoe-Regular.ttf",
+
+            // --- AbhayaLibre (TTF) ---
+            // 你只有 Medium，所以无论要什么都给 Medium
+            (FontFamily::AbhayaLibre, _) => "AbhayaLibre-Medium.ttf",
+        }
+    }
+}
+
+type FontCache = HashMap<FontKey, Arc<Vec<u8>>>;
+
+static FONT_CACHE: Lazy<Mutex<FontCache>> = Lazy::new(|| {
+    Mutex::new(HashMap::new())
+});
+
+/// **获取字体资源**
+/// 
+/// 用法: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold)
+pub fn get_font(family: FontFamily, weight: FontWeight) -> Arc<Vec<u8>> {
+    let key = FontKey { family, weight };
+
+    // 1. 查缓存
+    let mut cache = FONT_CACHE.lock().unwrap();
+    if let Some(data) = cache.get(&key) {
+        return data.clone();
+    }
+
+    // 2. 加载文件
+    let filename = key.filename();
+    // 假设你的字体都在 src-tauri/assets/fonts/ 下 (根据你的截图调整路径)
+    // ⚠️ 注意：根据你的截图，文件夹是 `assets/fonts`，请确认路径
+    let path = Path::new("assets/fonts").join(filename);
+    
+    println!("📦 [LazyLoad] Font: {:?} -> {:?}", key, path);
+
+    let data = fs::read(&path).unwrap_or_else(|_| {
+        eprintln!("❌ 严重错误: 字体文件缺失 {:?}，加载空数据", path);
+        vec![]
+    });
+
+    let arc_data = Arc::new(data);
+    cache.insert(key, arc_data.clone());
+    
+    arc_data
 }
