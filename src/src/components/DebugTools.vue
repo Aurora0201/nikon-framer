@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, reactive } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { store } from '../store.js';
@@ -8,70 +8,70 @@ import { store } from '../store.js';
 const previewSrc = ref(null);
 const isLoading = ref(false);
 const errorMsg = ref(null);
-const currentFilePath = ref(null); // 记住当前调试的文件路径，以便重复刷新
+const currentFilePath = ref(null);
 
-// --- 核心逻辑 1: 构建后端需要的上下文 ---
-// ⚠️ 必须严格匹配后端 Rust Enum (StyleOptions) 的结构
+// 视图变换状态
+const view = reactive({
+  scale: 1,
+  x: 0,
+  y: 0,
+  isDragging: false,
+  startX: 0,
+  startY: 0
+});
+
+// --- 核心逻辑 ---
+
 function buildDebugContext() {
   const s = store.settings.style;
-  
-  // 1. 极简白底
   if (s === 'BottomWhite') return { style: 'BottomWhite' };
-  
-  // 2. 大师模式
   if (s === 'Master') return { style: 'Master' };
-  
-  // 3. 高斯模糊 (带参数)
   if (s === 'GaussianBlur') {
     return { 
       style: 'GaussianBlur', 
       shadowIntensity: parseFloat(store.settings.shadowIntensity) || 0.0 
     };
   }
-  
   return { style: 'BottomWhite' };
 }
 
-// --- 核心逻辑 2: 生成预览 ---
+const resetView = () => {
+  view.scale = 1;
+  view.x = 0;
+  view.y = 0;
+};
+
 const generatePreview = async (path) => {
   if (!path) return;
-  
   isLoading.value = true;
   errorMsg.value = null;
-  currentFilePath.value = path; // 记录路径
+  currentFilePath.value = path;
+  
+  // 切换图片时复位视图，体验更好
+  resetView();
 
   try {
     const context = buildDebugContext();
-    console.log("🧪 [Debug] 请求预览:", path, context);
-
-    // 调用后端 debug 命令
     const base64Image = await invoke('debug_process_image', {
       path: path,
       context: context
     });
-
     previewSrc.value = base64Image;
   } catch (err) {
-    console.error("❌ Debug Error:", err);
+    console.error("Debug Error:", err);
     errorMsg.value = typeof err === 'string' ? err : JSON.stringify(err);
   } finally {
     isLoading.value = false;
   }
 };
 
-// --- 交互逻辑 ---
-
-// 1. 选择文件
 const handleFileSelect = async () => {
   try {
     const file = await open({
       multiple: false,
       filters: [{ name: 'Images', extensions: ['jpg', 'png', 'jpeg', 'webp'] }]
     });
-    
     if (file) {
-      // open 插件返回的是对象 { path: "...", name: "..." } 或直接路径字符串，取决于版本
-      // Tauri V2 plugin-dialog 通常返回 struct，我们需要 path 字段
       const path = file.path || file; 
       generatePreview(path);
     }
@@ -80,47 +80,65 @@ const handleFileSelect = async () => {
   }
 };
 
-// 2. 监听设置变化 -> 自动刷新预览
-// 只要 store.settings 变了（比如拖动了阴影滑块），且当前有图片，就重绘
 watch(() => store.settings, () => {
   if (currentFilePath.value && !isLoading.value) {
-    console.log("🔄 设置变化，自动刷新预览...");
     generatePreview(currentFilePath.value);
   }
 }, { deep: true });
 
-// --- 辅助测试工具 (对应原来的按钮) ---
+// --- 交互事件处理 ---
 
+const handleWheel = (e) => {
+  if (!previewSrc.value) return;
+  e.preventDefault();
+  const zoomIntensity = 0.1;
+  const delta = e.deltaY > 0 ? -zoomIntensity : zoomIntensity;
+  const newScale = view.scale + delta;
+  view.scale = Math.min(Math.max(0.1, newScale), 10);
+};
+
+const startDrag = (e) => {
+  if (!previewSrc.value) return;
+  e.preventDefault();
+  view.isDragging = true;
+  view.startX = e.clientX - view.x;
+  view.startY = e.clientY - view.y;
+};
+
+const onDrag = (e) => {
+  if (!view.isDragging) return;
+  e.preventDefault();
+  view.x = e.clientX - view.startX;
+  view.y = e.clientY - view.startY;
+};
+
+const stopDrag = () => {
+  view.isDragging = false;
+};
+
+// --- 测试工具 ---
 const runShadowTest = async () => {
+  resetView();
   isLoading.value = true;
   try {
-    const res = await invoke('debug_shadow_grid'); // 调用后端生成阴影网格
+    const res = await invoke('debug_shadow_grid');
     previewSrc.value = res;
-    currentFilePath.value = null; // 清除当前文件路径，因为这是生成的
-  } catch (e) {
-    alert("阴影测试失败: " + e);
-  } finally {
-    isLoading.value = false;
-  }
+    currentFilePath.value = null;
+  } catch (e) { alert(e); } finally { isLoading.value = false; }
 };
 
 const runWeightTest = async () => {
+  resetView();
   isLoading.value = true;
   try {
-    const res = await invoke('debug_weight_grid'); // 调用后端生成字重网格
+    const res = await invoke('debug_weight_grid');
     previewSrc.value = res;
     currentFilePath.value = null;
-  } catch (e) {
-    alert("字重测试失败: " + e);
-  } finally {
-    isLoading.value = false;
-  }
+  } catch (e) { alert(e); } finally { isLoading.value = false; }
 };
 
-// 手动切换拖拽状态 (原有逻辑)
 const toggleDragState = () => {
   store.isDragging = !store.isDragging;
-  console.log("🔧 [Debug] 手动切换状态:", store.isDragging);
 };
 </script>
 
@@ -128,12 +146,24 @@ const toggleDragState = () => {
   <div class="debug-container">
     <div class="debug-header">
       <label>🛠️ 实时调试台 / Instant Preview</label>
-      <button @click="handleFileSelect" :disabled="isLoading" class="primary-btn">
-        {{ isLoading ? '处理中...' : '📸 选择照片 (Pick Image)' }}
-      </button>
+      <div class="header-controls">
+        <span class="hint" v-if="previewSrc">🖱️ 滚轮缩放 · 拖拽移动 · 双击复位</span>
+        <button @click="handleFileSelect" :disabled="isLoading" class="primary-btn">
+          {{ isLoading ? '处理中...' : '📸 选择照片' }}
+        </button>
+      </div>
     </div>
 
-    <div class="preview-viewport">
+    <div 
+      class="preview-viewport"
+      @wheel="handleWheel"
+      @mousedown="startDrag"
+      @mousemove="onDrag"
+      @mouseup="stopDrag"
+      @mouseleave="stopDrag"
+      @dblclick="resetView"
+      :class="{ 'grabbing': view.isDragging, 'grab': previewSrc && !view.isDragging }"
+    >
       <div v-if="!previewSrc && !isLoading" class="placeholder" @click="handleFileSelect">
         <div style="font-size: 2em; margin-bottom: 10px;">🖼️</div>
         <div>点击选择一张图片<br>进行实时调参预览</div>
@@ -143,30 +173,28 @@ const toggleDragState = () => {
         <div class="spinner"></div>
       </div>
 
-      <img v-if="previewSrc" :src="previewSrc" class="preview-img" />
+      <img 
+        v-if="previewSrc" 
+        :src="previewSrc" 
+        class="preview-img" 
+        :style="{ 
+          transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` 
+        }"
+        @dragstart.prevent
+      />
 
-      <div v-if="errorMsg" class="error-msg">
-        {{ errorMsg }}
+      <div v-if="errorMsg" class="error-msg">{{ errorMsg }}</div>
+      
+      <div v-if="previewSrc" class="scale-indicator">
+        {{ Math.round(view.scale * 100) }}%
       </div>
     </div>
 
-    <div class="info-bar" v-if="currentFilePath">
-      正在调试: {{ currentFilePath }}
-    </div>
-
     <div class="tools-bar">
-      <label>生成器测试 (Generators):</label>
       <div class="btn-group">
-        <button @click="runShadowTest" class="secondary-btn">
-          🐞 阴影网格
-        </button>
-        <button @click="runWeightTest" class="secondary-btn">
-          🐞 字体粗细
-        </button>
-        <button 
-          @click="toggleDragState" 
-          class="secondary-btn danger-btn"
-        >
+        <button @click="runShadowTest" class="secondary-btn">🐞 阴影网格</button>
+        <button @click="runWeightTest" class="secondary-btn">🐞 字体粗细</button>
+        <button @click="toggleDragState" class="secondary-btn danger-btn">
           ⚡ 强制高亮 ({{ store.isDragging ? 'ON' : 'OFF' }})
         </button>
       </div>
@@ -188,55 +216,83 @@ const toggleDragState = () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 10px;
 }
 
-.debug-header label {
-  font-weight: bold;
-  color: var(--nikon-yellow, #ffe100);
+.hint {
+  font-size: 0.75em;
+  color: #666;
+  margin-right: 15px;
+  user-select: none;
 }
+
+/* 🟢 关键样式修改：视口 */
+.preview-viewport {
+  width: 100%;
+  height: 460px;        /* 1. 固定高度 */
+  background: #0b0b0b;  /* 深色背景 */
+  border: 1px solid #333;
+  border-radius: 4px;
+  position: relative;   /* 2. 相对定位，作为绝对定位子元素的参考 */
+  overflow: hidden;     /* 3. 隐藏溢出内容 */
+  
+  /* Flex 用于居中 placeholder 和 loading，图片不依赖 flex */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 鼠标手势 */
+.grab { cursor: grab; }
+.grabbing { cursor: grabbing; }
+
+/* 🟢 关键样式修改：图片 */
+.preview-img {
+  position: absolute;   /* 4. 绝对定位：脱离文档流，不占空间 */
+  top: 0; left: 0;
+  width: 100%;          /* 5. 填满容器宽度 */
+  height: 100%;         /* 6. 填满容器高度 */
+  object-fit: contain;  /* 7. 保持比例显示，不拉伸 */
+  
+  transition: transform 0.05s linear; /* 极短的过渡让拖拽更跟手 */
+  user-select: none;    /* 禁止选中 */
+  will-change: transform; /* 性能优化 */
+}
+
+.scale-indicator {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: rgba(0,0,0,0.6);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.7em;
+  color: #ccc;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.placeholder {
+  color: #444;
+  text-align: center;
+  cursor: pointer;
+  padding: 20px;
+  user-select: none;
+  z-index: 1; /* 确保在底层 */
+}
+.placeholder:hover { color: #666; }
 
 .primary-btn {
   background: #444;
   color: white;
   border: 1px solid #555;
-  padding: 6px 12px;
+  padding: 5px 12px;
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.2s;
 }
-.primary-btn:hover { background: #555; border-color: #777; }
+.primary-btn:hover { background: #555; }
+.primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* 预览视口 */
-.preview-viewport {
-  width: 100%;
-  min-height: 250px;
-  background: #000;
-  border: 1px dashed #444;
-  border-radius: 6px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-  overflow: hidden;
-}
-
-.placeholder {
-  color: #555;
-  text-align: center;
-  cursor: pointer;
-  padding: 20px;
-}
-.placeholder:hover { color: #777; }
-
-.preview-img {
-  max-width: 100%;
-  max-height: 400px; /* 限制高度，防止把页面撑太长 */
-  object-fit: contain;
-  box-shadow: 0 5px 20px rgba(0,0,0,0.5);
-}
-
-/* Loading */
 .loading-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -255,54 +311,33 @@ const toggleDragState = () => {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* 错误信息 */
 .error-msg {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
   color: #ff4d4d;
-  padding: 20px;
-  background: rgba(255, 0, 0, 0.1);
-  border-radius: 4px;
+  padding: 10px;
+  background: rgba(50, 0, 0, 0.9);
+  text-align: center;
+  font-size: 0.8em;
+  z-index: 20;
 }
 
-.info-bar {
-  margin-top: 8px;
-  font-size: 0.75em;
-  color: #666;
-  font-family: monospace;
-  word-break: break-all;
-}
-
-/* 底部工具栏 */
 .tools-bar {
-  margin-top: 20px;
-  padding-top: 15px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px dashed #333;
 }
-.tools-bar label {
-  display: block;
-  font-size: 0.8em;
-  color: #666;
-  margin-bottom: 8px;
-}
-.btn-group {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
+.btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
 .secondary-btn {
   background: transparent;
   border: 1px dashed #555;
-  color: #aaa;
-  padding: 5px 10px;
-  font-size: 0.8em;
+  color: #888;
+  padding: 4px 10px;
+  font-size: 0.75em;
   cursor: pointer;
   border-radius: 4px;
 }
-.secondary-btn:hover { border-color: #888; color: #fff; }
-
-.danger-btn {
-  border-color: #833;
-  color: #d66;
-}
+.secondary-btn:hover { border-color: #888; color: #ccc; }
+.danger-btn { border-color: #833; color: #c55; }
 .danger-btn:hover { border-color: #f55; color: #f55; }
 </style>
