@@ -63,6 +63,21 @@ pub fn load_font_data(font_filename: &str) -> Vec<u8> {
     }
 }
 
+// 🟢 新增：加载主题专用字体的辅助函数
+// 这里的 font_name 是 resources 目录下的文件名
+pub fn load_theme_font(font_name: &str) -> Vec<u8> {
+    // 这里假设你的字体放在 src-tauri/resources/fonts/ 下
+    // 生产环境中，你应该使用 handle.path_resolver().resource_dir() 来获取路径
+    // 开发环境中，我们可以简单指向相对路径
+    let path = Path::new("assets/fonts").join(font_name);
+    
+    fs::read(&path).unwrap_or_else(|_| {
+        println!("⚠️ 警告: 找不到主题字体 {:?}，回退到默认字体", path);
+        // 如果找不到，为了防止崩溃，可以加载一个默认的 fallback 字体
+        // 或者直接 panic，取决于你的容错策略
+        vec![] 
+    })
+}
 
 pub struct BrandLogos {
     pub icon: Option<DynamicImage>,

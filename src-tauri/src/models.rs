@@ -27,6 +27,13 @@ pub enum StyleOptions {
         shadow_intensity: f32, // 只有这个模式有阴影参数
     },
 
+    // 🟢 [新增] 大师模式
+    // 参数几乎和 GaussianBlur 一样，因为它们都是模糊背景
+    #[serde(rename_all = "camelCase")]
+    Master {
+        font: FontConfig,
+    },
+
 }
 
 // 总配置
