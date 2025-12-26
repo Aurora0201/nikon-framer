@@ -53,6 +53,7 @@ onMounted(() => {
       <select id="style-select" v-model="store.settings.style">
         <option value="BottomWhite">简约白底 (Bottom White)</option>
         <option value="GaussianBlur">高斯模糊 (Atmosphere)</option>
+        <option value="Master">大师模式 (Master Series)</option>
       </select>
     </div>
 
