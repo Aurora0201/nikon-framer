@@ -3,6 +3,7 @@
 pub mod white;
 pub mod blur;
 pub mod traits;
+pub mod master;
 
 // 🟢 修改点：引入 ImageFormat，去掉 ImageOutputFormat (为了兼容性)
 use image::{DynamicImage, ImageBuffer, Rgba, imageops};
@@ -122,7 +123,55 @@ impl FrameProcessor for BlurProcessor {
     }
 }
 
-// --- 🏭 工厂函数：根据枚举创建对应的处理器 ---
+/// **Master Style Processor**
+///
+/// 大师模式处理器结构体。
+/// 只包含字体配置，不包含模糊/阴影参数（使用内部默认值）。
+pub struct MasterProcessor {
+    pub main_font_config: FontConfig,
+    // 🟢 新增：缓存字体数据 (Heap allocation)
+    // 为什么存 Vec<u8> 而不是 FontRef? 
+    // 因为 FontRef 有生命周期限制，存 Vec<u8> 所有权最简单安全。
+    pub script_font_data: Vec<u8>, 
+    pub serif_font_data: Vec<u8>,  // 用于 MASTER SERIES 等小字
+}
+
+// 🟢 关键修复：实现接口
+impl FrameProcessor for MasterProcessor {
+    /// **Implement Process Trait**
+    ///
+    /// 加载资源并调用 master::process 核心逻辑。
+    fn process(&self, img: &DynamicImage, make: &str, model: &str, params: &str) -> Result<DynamicImage, String> {
+        // 1. 加载字体
+        let main_font_data = resources::load_font_data(&self.main_font_config.filename);
+        let main_font = FontRef::try_from_slice(&main_font_data).map_err(|_| "主字体解析失败")?;
+        // 2. 调用 master 模块
+        // 注意：这里没有传 shadow_intensity，符合你的要求
+
+        // 2. 解析缓存的装饰字体
+        // 🟢 优雅点：这里只是从内存解析，极其快速
+        let script_font = FontRef::try_from_slice(&self.script_font_data).unwrap_or(main_font.clone());
+        let serif_font = FontRef::try_from_slice(&self.serif_font_data).unwrap_or(main_font.clone());
+
+        // 3. 调用绘制
+        let result_img = master::process(
+            img, 
+            params, 
+            &main_font,   // 用于参数
+            &script_font, // 用于 "The decisive moment"
+            &serif_font   // 用于 "MASTER SERIES"
+        );
+
+        Ok(result_img)
+    }
+}
+
+
+
+
+/// **Factory Function**
+///
+/// 根据枚举创建对应的处理器实例。
 pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor> {
     match options {
         StyleOptions::BottomWhite { font } => {
@@ -134,6 +183,18 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor> {
             Box::new(BlurProcessor { 
                 font_config: font.clone(),
                 shadow: *shadow_intensity 
+            })
+        },
+        StyleOptions::Master { font } => {
+            // 🟢 在创建处理器时，一次性把装饰字体加载进内存
+            // 假设文件名是固定的，或者你可以从 options 传入
+            let script_data = resources::load_theme_font("MrDafoe-Regular.ttf"); // 举例
+            let serif_data = resources::load_theme_font("AbhayaLibre-Medium.ttf");  // 举例
+
+            Box::new(MasterProcessor {
+                main_font_config: font.clone(),
+                script_font_data: script_data,
+                serif_font_data: serif_data,
             })
         },
         

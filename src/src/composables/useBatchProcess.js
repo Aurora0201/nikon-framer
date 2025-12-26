@@ -29,10 +29,15 @@ function buildBatchContext() {
         // 只有模糊模式才传这个参数
         shadowIntensity: parseFloat(store.settings.shadowIntensity) || 0.0
       };
-
-    // 未来扩展：
-    // case 'FilmParams':
-    //   return { style: 'FilmParams', iso: 400, showDate: true };
+// 🟢 [新增] 大师模式
+    case 'Master':
+      return {
+        style: 'Master', // 对应 Rust Enum Variant
+        font: fontConfig 
+        // ⚠️ 注意：这里不传 shadowIntensity，因为 Rust 后端 Master 结构体里没有这个字段
+        // 这正是我们重构的精髓：前端只传后端需要的。
+      };
+    
 
     default:
       console.warn("未知的样式，回退到默认参数");
