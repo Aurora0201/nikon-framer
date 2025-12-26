@@ -3,49 +3,57 @@ import { ref, computed, onUnmounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { store } from '../store.js';
 
-// 🟢 新增辅助函数：根据不同模式，组装不同的参数对象
+// 🟢 辅助函数：构建上下文 (重构版)
+// 原则：后端接管审美，前端不再发送字体配置，只发送模式特有的必要参数。
 function buildBatchContext() {
-  const currentStyle = store.settings.style; // 例如 "BottomWhite" 或 "GaussianBlur"
+  const currentStyle = store.settings.style;
 
-  // 1. 公共参数：字体配置
-  const fontConfig = {
-    filename: store.settings.font,
-    weight: store.settings.weight
-  };
-
-  // 2. 根据样式名称，构建不同的对象结构 (对应 Rust 的 Enum)
-  switch (currentStyle) {
-    case 'BottomWhite':
-      return {
-        style: 'BottomWhite', // 对应 Rust Enum 的变体名
-        font: fontConfig
-        // 白底模式不需要其他参数
-      };
-
-    case 'GaussianBlur':
-      return {
-        style: 'GaussianBlur',
-        font: fontConfig,
-        // 只有模糊模式才传这个参数
-        shadowIntensity: parseFloat(store.settings.shadowIntensity) || 0.0
-      };
-// 🟢 [新增] 大师模式
-    case 'Master':
-      return {
-        style: 'Master', // 对应 Rust Enum Variant
-        font: fontConfig 
-        // ⚠️ 注意：这里不传 shadowIntensity，因为 Rust 后端 Master 结构体里没有这个字段
-        // 这正是我们重构的精髓：前端只传后端需要的。
-      };
-    
-
-    default:
-      console.warn("未知的样式，回退到默认参数");
-      return {
-        style: 'BottomWhite',
-        font: fontConfig
-      };
+  // 1. 极简白底 (BottomWhite)
+  // 后端定义: StyleOptions::BottomWhite (Unit Variant)
+  if (currentStyle === 'BottomWhite') {
+    return { 
+      style: 'BottomWhite' 
+    };
   }
+
+  // 2. 高斯模糊 (GaussianBlur)
+  // 后端定义: StyleOptions::GaussianBlur { shadow_intensity: f32 }
+  if (currentStyle === 'GaussianBlur') {
+    return {
+      style: 'GaussianBlur',
+      // 确保转为浮点数，符合 Rust f32 类型
+      shadowIntensity: parseFloat(store.settings.shadowIntensity) || 0.0
+    };
+  }
+
+  // 3. 大师模式 (Master)
+  // 后端定义: StyleOptions::Master (Unit Variant)
+  // 字体由后端 MasterProcessor 内部加载，前端无需关心
+  if (currentStyle === 'Master') {
+    return { 
+      style: 'Master' 
+    };
+  }
+
+  // 🚀 未来预留：自定义模式 (Custom)
+  // 只有在这个模式下，我们才恢复发送 fontConfig
+  /*
+  if (currentStyle === 'Custom') {
+    return {
+      style: 'Custom',
+      font: {
+        filename: store.settings.font,
+        weight: store.settings.weight
+      }
+    };
+  }
+  */
+
+  // 默认兜底
+  console.warn("未知的样式，回退到默认参数");
+  return { 
+    style: 'BottomWhite' 
+  };
 }
 
 export function useBatchProcess() {
@@ -84,13 +92,13 @@ export function useBatchProcess() {
       return;
     }
 
-    // 🟢 1. 获取文件路径
+    // 1. 获取文件路径
     const filePaths = store.fileQueue.map(f => f.path);
 
-    // 🟢 2. 动态构建 Context (使用上面的辅助函数)
-    // 这里生成的对象结构，完全匹配 Rust 的 Enum 定义
+    // 🟢 2. 动态构建 Context (使用瘦身后的辅助函数)
+    // 这里生成的对象结构，必须严格匹配 Rust 后端的 Enum 定义
     const contextPayload = buildBatchContext();
-    console.log("📦 [V2] 准备发送 Context:", contextPayload);
+    console.log("📦 [V2] 发送 Payload:", contextPayload);
 
     // 更新状态
     store.isProcessing = true;
@@ -98,7 +106,7 @@ export function useBatchProcess() {
     store.setStatus("准备开始批处理...", "loading");
     store.progress.percent = 0;
 
-    // 启动计时器
+    // 启动计时器 (3秒后允许终止)
     if (stopTimer) clearTimeout(stopTimer);
     stopTimer = setTimeout(() => {
       if (store.isProcessing) canStop.value = true;
@@ -138,6 +146,6 @@ export function useBatchProcess() {
     buttonText,
     buttonClass,
     buttonCursor,
-    canStop // 导出这个状态以防万一需要
+    canStop
   };
 }
