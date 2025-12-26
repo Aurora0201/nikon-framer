@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use image::{DynamicImage, ImageFormat};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -80,6 +80,19 @@ pub fn load_brand_logos(make: &str) -> BrandLogos {
     }
 }
 
+
+// 🟢 新增：用于存储真实的资源绝对路径
+// 默认是 None，必须在 main.rs 里初始化
+static FONT_BASE_DIR: Lazy<Mutex<Option<PathBuf>>> = Lazy::new(|| {
+    Mutex::new(None)
+});
+
+// 🟢 新增：初始化函数 (将在 main.rs 中调用)
+pub fn init_font_path(path: PathBuf) {
+    let mut dir = FONT_BASE_DIR.lock().unwrap();
+    *dir = Some(path);
+    println!("✅ [Resources] 字体路径已初始化");
+}
 
 
 // 🟢 1. 定义字体家族 (对应你实际拥有的字体系列)
