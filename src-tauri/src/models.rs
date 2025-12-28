@@ -3,6 +3,7 @@ use serde::Deserialize;
 // 字体配置（公用）
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct FontConfig {
     pub filename: String,
     pub weight: String,
