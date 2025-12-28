@@ -1,11 +1,21 @@
 use image::{DynamicImage, GenericImageView, Rgba, imageops};
 use ab_glyph::{FontRef, PxScale};
 use std::time::Instant;
+use std::sync::Arc;
 
-use crate::resources::BrandLogos;
 use crate::graphics;
 // 引入父模块公共工具
 use super::{clean_model_name, resize_image_by_height};
+
+// 🟢 [关键修改] 定义模糊模板所需的资源槽位
+// 模糊模式通常不需要 badge_icon (左上角小标)，只需要中间的主副标
+pub struct BlurStyleResources {
+    // 对应主Logo位置 (如 "Nikon", "Sony")
+    pub main_logo: Option<Arc<DynamicImage>>, 
+    
+    // 对应副Logo位置 (如 "Z", "Alpha")
+    pub sub_logo:  Option<Arc<DynamicImage>>, 
+}
 
 /// 内部配置结构体：统一管理参数
 struct BlurConfig {
@@ -25,12 +35,11 @@ struct BlurConfig {
     text_block_centering_ratio: f32, // 文字块整体垂直居中比例
 
     // --- Logo 与 机型文字微调 ---
-    logo_word_scale: f32,  // "Nikon" 单词大小比例
-    logo_z_scale: f32,     // "Z" Logo 大小比例
+    logo_main_scale: f32,  // 主Logo大小比例 (原 word)
+    logo_sub_scale: f32,   // 副Logo大小比例 (原 z)
     model_text_scale: f32, // 机型文字大小比例
     
-    // 🟢 [关键修改] 机型数字(如"50")的独立垂直偏移比例
-    // 正数表示向下移，负数向上移
+    // 机型数字(如"50")的独立垂直偏移比例
     model_text_y_shift_ratio: f32, 
 }
 
@@ -49,14 +58,11 @@ impl Default for BlurConfig {
             line_gap_ratio: 0.12,
             text_block_centering_ratio: 0.5,
 
-            // Logo 比例保持您之前的设定
-            logo_word_scale: 0.8,
-            logo_z_scale: 0.6,
+            logo_main_scale: 0.8,
+            logo_sub_scale: 0.6,
             model_text_scale: 0.65,
 
-            // 🟢 在这里调整 "50" 的位置
-            // 0.05 是一个相对边框宽度的比例，您可以根据视觉效果微调
-            // 比如边框是 300px，0.05 大约就是下移 15px
+            // 0.10 大约下移 15px (视分辨率而定)
             model_text_y_shift_ratio: 0.10, 
         }
     }
@@ -69,8 +75,8 @@ pub fn process(
     shooting_params: &str,
     font: &FontRef,
     font_weight: &str,
-    shadow_intensity: f32,
-    logos: &BrandLogos 
+    _shadow_intensity: f32, // 变量不再使用，加下划线避免警告，或者你可以直接从参数中移除
+    assets: &BlurStyleResources 
 ) -> DynamicImage {
     // 初始化配置
     let cfg = BlurConfig::default();
@@ -78,13 +84,22 @@ pub fn process(
     let t0 = Instant::now();
     let (width, height) = img.dimensions();
 
+    // -------------------------------------------------------------
+    // 【修改点】 视觉一致性修复
+    // -------------------------------------------------------------
+    // 原来是: let border_size = (width as f32 * cfg.border_ratio) as u32;
+    // 修改为: 使用 width 和 height 中的较小值(或者较大值)作为基准
+    
+    // 方案 A (推荐): 基于短边。这通常能带来最稳健的比例。
+    let ref_size = width.min(height) as f32;
+
     // 1. 基础尺寸
-    let border_size = (width as f32 * cfg.border_ratio) as u32; 
+    let border_size = (ref_size as f32 * cfg.border_ratio) as u32; 
     let bottom_extra = (border_size as f32 * cfg.bottom_extra_ratio) as u32; 
     let canvas_w = width + border_size * 2;
     let canvas_h = height + border_size * 2 + bottom_extra;
 
-    // 2. 模糊背景
+    // 2. 模糊背景 (保留你原有的 resize 优化)
     let t_blur = Instant::now();
     let scale_factor_bg = (width.max(height) as f32 / cfg.process_limit as f32).max(1.0);
     let small_w = (canvas_w as f32 / scale_factor_bg) as u32;
@@ -94,29 +109,34 @@ pub fn process(
     let mut blurred = small_img.blur(cfg.blur_sigma);
     imageops::colorops::brighten(&mut blurred, cfg.bg_brightness);
     
+    // 背景放大回原尺寸
     let mut canvas = blurred.resize_exact(canvas_w, canvas_h, imageops::FilterType::Triangle).to_rgba8();
     println!("  - [PERF] 高斯模糊背景生成: {:.2?}", t_blur.elapsed());
 
-    // 3. 玻璃与阴影
-    let t_shadow = Instant::now();
+    // -------------------------------------------------------------
+    // 3. 合成前景 (保留玻璃特效，移除阴影)
+    // -------------------------------------------------------------
+    let t_composite = Instant::now();
+    
+    // A. 处理玻璃本体 (Glass) - 这一步通常给图片加圆角或内描边
     let glass_img = graphics::apply_rounded_glass_effect(img);
-    let shadow_img = graphics::create_diffuse_shadow(glass_img.width(), glass_img.height(), border_size, shadow_intensity);
     
-    let target_center_x = (border_size as i64) + (width as i64 / 2);
-    let offset_y = (border_size as f32 * 0.3) as i64;
-    let target_center_y = (border_size as i64) + (height as i64 / 2) + offset_y;
+    // B. 计算位置并直接合成
+    // 计算前景图相对于原图扩大的厚度（假设 apply_rounded_glass_effect 增加了边框）
+    // 如果 glass_img 和原图一样大，border_thickness 就是 0
+    let border_thickness_h = (glass_img.height().saturating_sub(height)) / 2;
+
+    // 定位逻辑：
+    // X轴居中
+    let overlay_x = (canvas_w - glass_img.width()) / 2;
+    // Y轴：放置在顶部的 border_size 处（减去特效增加的厚度，确保原图内容位置视觉正确）
+    let overlay_y = (border_size as i64) - (border_thickness_h as i64);
     
-    let draw_x = target_center_x - (shadow_img.width() as i64 / 2);
-    let draw_y = target_center_y - (shadow_img.height() as i64 / 2);
-    imageops::overlay(&mut canvas, &shadow_img, draw_x as i64, draw_y as i64);
+    imageops::overlay(&mut canvas, &glass_img, overlay_x as i64, overlay_y);
+    
+    println!("  - [PERF] 玻璃特效合成 (无阴影): {:.2?}", t_composite.elapsed());
 
-    let border_thickness = (glass_img.width() - width) / 2;
-    let overlay_x = border_size as i64 - border_thickness as i64;
-    let overlay_y = border_size as i64 - border_thickness as i64;
-    imageops::overlay(&mut canvas, &glass_img, overlay_x, overlay_y);
-    println!("  - [PERF] 阴影与玻璃特效合成: {:.2?}", t_shadow.elapsed());
-
-    // 4. 文字布局计算
+    // 4. 文字布局计算 (保持不变)
     let text_color = Rgba([255, 255, 255, 255]); 
     let sub_text_color = Rgba([200, 200, 200, 255]); 
     
@@ -139,24 +159,24 @@ pub fn process(
         let base_h = font_size_model * 1.2; 
 
         // 使用配置参数
-        let h_word = (base_h * cfg.logo_word_scale) as u32;
-        let h_z    = (base_h * cfg.logo_z_scale) as u32;
+        let h_main = (base_h * cfg.logo_main_scale) as u32;
+        let h_sub  = (base_h * cfg.logo_sub_scale) as u32;
         let s_text = base_h * cfg.model_text_scale;
 
         let spacing = (font_size_model * 0.3) as u32; 
         let mut total_w = 0;
 
-        // --- 预计算宽度 ---
-        let scaled_word = if let Some(w) = &logos.word {
-            let white_w = graphics::make_image_white(w);
-            let s = resize_image_by_height(&white_w, h_word);
+        // --- A. 预处理资源 (转白 + 缩放) ---
+        let scaled_main = if let Some(logo) = &assets.main_logo {
+            let white_img = graphics::make_image_white(logo); 
+            let s = resize_image_by_height(&white_img, h_main);
             total_w += s.width() + spacing;
             Some(s)
         } else { None };
 
-        let scaled_z = if let Some(z) = &logos.z_symbol {
-            let white_z = graphics::make_image_white(z);
-            let s = resize_image_by_height(&white_z, h_z);
+        let scaled_sub = if let Some(logo) = &assets.sub_logo {
+            let white_img = graphics::make_image_white(logo);
+            let s = resize_image_by_height(&white_img, h_sub);
             total_w += s.width() + spacing;
             Some(s)
         } else { None };
@@ -170,36 +190,31 @@ pub fn process(
             Some(img)
         } else { None };
 
-        // --- 绘制元素 ---
+        // --- B. 绘制元素 ---
         let mut current_x = (canvas_w as i32 - total_w as i32) / 2;
         let row_center_y = line1_y + (font_size_model as i32 / 2);
 
-        // A. Nikon Logo
-        if let Some(img) = scaled_word {
+        if let Some(img) = scaled_main {
             let y = row_center_y - (img.height() as i32 / 2);
             imageops::overlay(&mut canvas, &img, current_x as i64, y as i64);
             current_x += img.width() as i32 + spacing as i32;
         }
 
-        // B. Z Logo
-        let mut z_bottom_y = 0;
-        if let Some(img) = scaled_z {
+        let mut sub_bottom_y = 0;
+        if let Some(img) = scaled_sub {
             let y = row_center_y - (img.height() as i32 / 2);
             imageops::overlay(&mut canvas, &img, current_x as i64, y as i64);
-            z_bottom_y = y + img.height() as i32;
+            sub_bottom_y = y + img.height() as i32;
             current_x += img.width() as i32 + spacing as i32;
         }
 
-        // C. 机型数字 (如 "50")
         if let Some(img) = text_img {
-            // 计算基础 Y 坐标 (底部对齐 Z Logo 或 垂直居中)
-            let base_y = if z_bottom_y > 0 {
-                z_bottom_y - img.height() as i32
+            let base_y = if sub_bottom_y > 0 {
+                sub_bottom_y - img.height() as i32
             } else {
                 row_center_y - (img.height() as i32 / 2)
             };
 
-            // 🟢 [关键修改] 应用额外的垂直偏移
             let extra_offset = (border_size as f32 * cfg.model_text_y_shift_ratio) as i32;
             let final_y = base_y + extra_offset;
 
