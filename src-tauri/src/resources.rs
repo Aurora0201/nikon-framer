@@ -5,48 +5,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
 
-// 🟢 1. 在这里定义所有内置字体的显示名称
-// 只要文件名传回来是这个，我们就加载 include_bytes! 里的数据
-const BUILTIN_FONT_NAME: &str = "Nikon-Default.ttf";
-
-// 扫描字体列表 (内置 + 用户目录)
-pub fn get_font_list() -> Vec<String> {
-    let mut fonts = Vec::new();
-
-    // 🟢 步骤 A: 添加内置字体到列表最前面
-    fonts.push(BUILTIN_FONT_NAME.to_string());
-
-    // 🟢 步骤 B: 扫描用户 "fonts" 文件夹
-    let font_dir = "fonts"; 
-    // 确保目录存在，不存在则创建，避免报错
-    if !Path::new(font_dir).exists() {
-        let _ = fs::create_dir(font_dir);
-    }
-
-    if let Ok(entries) = fs::read_dir(font_dir) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if path.is_file() {
-                    if let Some(ext) = path.extension() {
-                        let ext_str = ext.to_string_lossy().to_lowercase();
-                        if ext_str == "ttf" || ext_str == "otf" {
-                            if let Some(name) = path.file_name() {
-                                let name_str = name.to_string_lossy().to_string();
-                                // 防止用户文件夹里也有一个叫这个名字的文件导致重复显示
-                                if name_str != BUILTIN_FONT_NAME {
-                                    fonts.push(name_str);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    fonts
-}
-
 
 pub struct BrandLogos {
     pub icon: Option<DynamicImage>,
