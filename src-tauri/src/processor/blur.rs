@@ -75,8 +75,8 @@ pub fn process(
     shooting_params: &str,
     font: &FontRef,
     font_weight: &str,
-    shadow_intensity: f32,
-    assets: &BlurStyleResources // 🟢 接收通用的资源包
+    _shadow_intensity: f32, // 变量不再使用，加下划线避免警告，或者你可以直接从参数中移除
+    assets: &BlurStyleResources 
 ) -> DynamicImage {
     // 初始化配置
     let cfg = BlurConfig::default();
@@ -84,13 +84,22 @@ pub fn process(
     let t0 = Instant::now();
     let (width, height) = img.dimensions();
 
+    // -------------------------------------------------------------
+    // 【修改点】 视觉一致性修复
+    // -------------------------------------------------------------
+    // 原来是: let border_size = (width as f32 * cfg.border_ratio) as u32;
+    // 修改为: 使用 width 和 height 中的较小值(或者较大值)作为基准
+    
+    // 方案 A (推荐): 基于短边。这通常能带来最稳健的比例。
+    let ref_size = width.min(height) as f32;
+
     // 1. 基础尺寸
-    let border_size = (width as f32 * cfg.border_ratio) as u32; 
+    let border_size = (ref_size as f32 * cfg.border_ratio) as u32; 
     let bottom_extra = (border_size as f32 * cfg.bottom_extra_ratio) as u32; 
     let canvas_w = width + border_size * 2;
     let canvas_h = height + border_size * 2 + bottom_extra;
 
-    // 2. 模糊背景
+    // 2. 模糊背景 (保留你原有的 resize 优化)
     let t_blur = Instant::now();
     let scale_factor_bg = (width.max(height) as f32 / cfg.process_limit as f32).max(1.0);
     let small_w = (canvas_w as f32 / scale_factor_bg) as u32;
@@ -100,29 +109,34 @@ pub fn process(
     let mut blurred = small_img.blur(cfg.blur_sigma);
     imageops::colorops::brighten(&mut blurred, cfg.bg_brightness);
     
+    // 背景放大回原尺寸
     let mut canvas = blurred.resize_exact(canvas_w, canvas_h, imageops::FilterType::Triangle).to_rgba8();
     println!("  - [PERF] 高斯模糊背景生成: {:.2?}", t_blur.elapsed());
 
-    // 3. 玻璃与阴影
-    let t_shadow = Instant::now();
+    // -------------------------------------------------------------
+    // 3. 合成前景 (保留玻璃特效，移除阴影)
+    // -------------------------------------------------------------
+    let t_composite = Instant::now();
+    
+    // A. 处理玻璃本体 (Glass) - 这一步通常给图片加圆角或内描边
     let glass_img = graphics::apply_rounded_glass_effect(img);
-    let shadow_img = graphics::create_diffuse_shadow(glass_img.width(), glass_img.height(), border_size, shadow_intensity);
     
-    let target_center_x = (border_size as i64) + (width as i64 / 2);
-    let offset_y = (border_size as f32 * 0.3) as i64;
-    let target_center_y = (border_size as i64) + (height as i64 / 2) + offset_y;
+    // B. 计算位置并直接合成
+    // 计算前景图相对于原图扩大的厚度（假设 apply_rounded_glass_effect 增加了边框）
+    // 如果 glass_img 和原图一样大，border_thickness 就是 0
+    let border_thickness_h = (glass_img.height().saturating_sub(height)) / 2;
+
+    // 定位逻辑：
+    // X轴居中
+    let overlay_x = (canvas_w - glass_img.width()) / 2;
+    // Y轴：放置在顶部的 border_size 处（减去特效增加的厚度，确保原图内容位置视觉正确）
+    let overlay_y = (border_size as i64) - (border_thickness_h as i64);
     
-    let draw_x = target_center_x - (shadow_img.width() as i64 / 2);
-    let draw_y = target_center_y - (shadow_img.height() as i64 / 2);
-    imageops::overlay(&mut canvas, &shadow_img, draw_x as i64, draw_y as i64);
+    imageops::overlay(&mut canvas, &glass_img, overlay_x as i64, overlay_y);
+    
+    println!("  - [PERF] 玻璃特效合成 (无阴影): {:.2?}", t_composite.elapsed());
 
-    let border_thickness = (glass_img.width() - width) / 2;
-    let overlay_x = border_size as i64 - border_thickness as i64;
-    let overlay_y = border_size as i64 - border_thickness as i64;
-    imageops::overlay(&mut canvas, &glass_img, overlay_x, overlay_y);
-    println!("  - [PERF] 阴影与玻璃特效合成: {:.2?}", t_shadow.elapsed());
-
-    // 4. 文字布局计算
+    // 4. 文字布局计算 (保持不变)
     let text_color = Rgba([255, 255, 255, 255]); 
     let sub_text_color = Rgba([200, 200, 200, 255]); 
     
@@ -153,15 +167,13 @@ pub fn process(
         let mut total_w = 0;
 
         // --- A. 预处理资源 (转白 + 缩放) ---
-        // 🟢 处理主Logo
         let scaled_main = if let Some(logo) = &assets.main_logo {
-            let white_img = graphics::make_image_white(logo); // Arc 自动解引用
+            let white_img = graphics::make_image_white(logo); 
             let s = resize_image_by_height(&white_img, h_main);
             total_w += s.width() + spacing;
             Some(s)
         } else { None };
 
-        // 🟢 处理副Logo
         let scaled_sub = if let Some(logo) = &assets.sub_logo {
             let white_img = graphics::make_image_white(logo);
             let s = resize_image_by_height(&white_img, h_sub);
@@ -169,7 +181,6 @@ pub fn process(
             Some(s)
         } else { None };
 
-        // 🟢 处理文字
         let model_str = clean_model_name(camera_make, camera_model);
         let text_img = if !model_str.is_empty() {
             let img = graphics::generate_skewed_text_high_quality(
@@ -183,14 +194,12 @@ pub fn process(
         let mut current_x = (canvas_w as i32 - total_w as i32) / 2;
         let row_center_y = line1_y + (font_size_model as i32 / 2);
 
-        // 1. 绘制 Main Logo
         if let Some(img) = scaled_main {
             let y = row_center_y - (img.height() as i32 / 2);
             imageops::overlay(&mut canvas, &img, current_x as i64, y as i64);
             current_x += img.width() as i32 + spacing as i32;
         }
 
-        // 2. 绘制 Sub Logo
         let mut sub_bottom_y = 0;
         if let Some(img) = scaled_sub {
             let y = row_center_y - (img.height() as i32 / 2);
@@ -199,20 +208,16 @@ pub fn process(
             current_x += img.width() as i32 + spacing as i32;
         }
 
-        // 3. 绘制机型文字
         if let Some(img) = text_img {
-            // 计算基础 Y 坐标 (如果有副Logo，则与副Logo底部对齐；否则垂直居中)
             let base_y = if sub_bottom_y > 0 {
                 sub_bottom_y - img.height() as i32
             } else {
                 row_center_y - (img.height() as i32 / 2)
             };
 
-            // 应用额外的垂直偏移
             let extra_offset = (border_size as f32 * cfg.model_text_y_shift_ratio) as i32;
             let final_y = base_y + extra_offset;
 
-            // 微调 X 坐标 (减少与 Logo 的间距)
             let x = current_x - 10; 
             imageops::overlay(&mut canvas, &img, x as i64, final_y as i64);
         }

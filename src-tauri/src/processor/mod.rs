@@ -2,19 +2,21 @@ pub mod white;
 pub mod blur;
 pub mod traits;
 pub mod master;
+pub mod polaroid; // 1. 确保已引入模块
 
 use std::sync::Arc;
 use image::{DynamicImage, ImageBuffer, Rgba, imageops};
 use ab_glyph::FontRef; 
 
 use crate::models::StyleOptions;
-// 假设你在 traits.rs 里定义了 FrameProcessor，如果叫 FrameProcessor 请自行替换
 use crate::processor::traits::FrameProcessor; 
 
-// 引入重构后的 resources 模块
+// 引入资源模块
 use crate::resources::{self, Brand, FontFamily, FontWeight, LogoType};
+// 引入各个子模块的特定资源结构体
 use crate::processor::white::WhiteStyleResources;
 use crate::processor::blur::BlurStyleResources;
+use crate::processor::polaroid::PolaroidResources; // 2. 引入 PolaroidResources
 
 // --- 公共辅助结构与函数 ---
 
@@ -59,7 +61,7 @@ pub fn clean_model_name(make: &str, model: &str) -> String {
     no_make
 }
 
-// 🟢 辅助函数：解析品牌字符串为枚举
+// 辅助函数：解析品牌字符串为枚举
 fn parse_brand(make: &str) -> Option<Brand> {
     let m = make.to_lowercase();
     if m.contains("nikon") {
@@ -91,7 +93,6 @@ impl FrameProcessor for BottomWhiteProcessor {
         let font = FontRef::try_from_slice(&self.font_data)
             .map_err(|_| "白底模式: 标准字体解析失败")?;
         
-        // 🟢 1. 解析品牌并获取资源
         let brand = parse_brand(make);
         
         let assets = if let Some(b) = brand {
@@ -101,7 +102,6 @@ impl FrameProcessor for BottomWhiteProcessor {
                     sub_logo:   resources::get_logo(b, LogoType::SymbolZ),       
                     badge_icon: resources::get_logo(b, LogoType::IconYellowBox), 
                 },
-                // 其他品牌只显示主标
                 _ => WhiteStyleResources {
                     main_logo: resources::get_logo(b, LogoType::Wordmark),
                     sub_logo: None,
@@ -109,11 +109,9 @@ impl FrameProcessor for BottomWhiteProcessor {
                 }
             }
         } else {
-            // 未知品牌，空资源
             WhiteStyleResources { main_logo: None, sub_logo: None, badge_icon: None }
         };
 
-        // 🟢 2. 调用 white::process
         Ok(white::process(img, make, model, params, &font, "Bold", &assets))
     }
 }
@@ -130,7 +128,6 @@ impl FrameProcessor for TransparentClassicProcessor {
         let font = FontRef::try_from_slice(&self.font_data)
             .map_err(|_| "模糊模式: 标准字体解析失败")?;
             
-        // 🟢 1. 解析品牌并获取资源
         let brand = parse_brand(make);
         
         let assets = if let Some(b) = brand {
@@ -143,7 +140,6 @@ impl FrameProcessor for TransparentClassicProcessor {
                     main_logo: resources::get_logo(b, LogoType::Wordmark),
                     sub_logo:  resources::get_logo(b, LogoType::SymbolAlpha),
                 },
-                // 其他品牌只显示主标
                 _ => BlurStyleResources {
                     main_logo: resources::get_logo(b, LogoType::Wordmark),
                     sub_logo: None,
@@ -153,7 +149,7 @@ impl FrameProcessor for TransparentClassicProcessor {
             BlurStyleResources { main_logo: None, sub_logo: None }
         };
         let default_shadow = 150.0;
-        // 🟢 2. 调用 blur::process
+        
         Ok(blur::process(img, make, model, params, &font, "Bold", default_shadow, &assets))
     }
 }
@@ -170,25 +166,21 @@ pub struct TransparentMasterProcessor {
 impl FrameProcessor for TransparentMasterProcessor {
     fn process(&self, img: &DynamicImage, _make: &str, _model: &str, params: &str) -> Result<DynamicImage, String> {
         
-        // 1. 解析主字体 (参数数值)
         let main = FontRef::try_from_slice(&self.main_font)
             .map_err(|_| "Master模式: 主字体解析失败".to_string())?;
 
-        // 2. 解析手写体
         let script = FontRef::try_from_slice(&self.script_font)
             .unwrap_or_else(|_| {
                 println!("⚠️ Master模式: 手写体解析失败，回退");
                 main.clone()
             });
 
-        // 3. 解析标题体
         let serif = FontRef::try_from_slice(&self.serif_font)
             .unwrap_or_else(|_| {
                 println!("⚠️ Master模式: 标题字体解析失败，回退");
                 main.clone()
             });
 
-        // 4. 绘制 (Master 模式不需要 Brand Logo)
         let result_img = master::process(
             img, 
             params, 
@@ -201,6 +193,46 @@ impl FrameProcessor for TransparentMasterProcessor {
     }
 }
 
+// ==========================================
+// 策略 4: 拍立得/极简白框处理器 (Polaroid)
+// ==========================================
+// 3. 新增 PolaroidProcessor 结构体
+pub struct PolaroidProcessor {
+    pub font_data: Arc<Vec<u8>>,
+}
+
+impl FrameProcessor for PolaroidProcessor {
+    fn process(&self, img: &DynamicImage, make: &str, model: &str, params: &str) -> Result<DynamicImage, String> {
+        // 解析字体
+        let font = FontRef::try_from_slice(&self.font_data)
+            .map_err(|_| "Polaroid模式: 字体解析失败")?;
+
+        // 1. 解析品牌
+        let brand = parse_brand(make);
+
+        // 2. 准备 PolaroidResources (适配器模式)
+        // Polaroid 模式只需要一个 Logo，通常是 Wordmark (黑色字体)
+        let assets = if let Some(b) = brand {
+            PolaroidResources {
+                logo: resources::get_logo(b, LogoType::Wordmark),
+            }
+        } else {
+            PolaroidResources { logo: None }
+        };
+        
+        // 3. 调用 polaroid::process_polaroid_style
+        // 注意：这里使用 "Regular" 因为你要求的是 Regular 字体
+        Ok(polaroid::process_polaroid_style(
+            img, 
+            make, 
+            model, 
+            params, 
+            &font, 
+            "Regular", 
+            &assets
+        ))
+    }
+}
 
 // ==========================================
 // 工厂函数: 核心装配车间
@@ -230,6 +262,14 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
                 serif_font: resources::get_font(FontFamily::AbhayaLibre, FontWeight::Medium),
             })
         },
-        
+
+        // 4. 注册 PolaroidWhite 模式
+        // 修复：之前这里错误地初始化了 TransparentMasterProcessor
+        // 现在正确初始化 PolaroidProcessor 并使用 InterDisplay-Regular
+        StyleOptions::PolaroidWhite => {
+            Box::new(PolaroidProcessor {
+                font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Regular),
+            })
+        },
     }
 }
