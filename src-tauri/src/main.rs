@@ -27,6 +27,8 @@ fn main() {
             commands::batch::start_batch_process_v2,
             //
             commands::common::check_output_exists,
+            // 🟢 注册新命令
+            commands::common::filter_unprocessed_files,
             // 通用命令
             commands::common::stop_batch_process,
             commands::common::check_file_exif,

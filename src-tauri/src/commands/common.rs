@@ -64,3 +64,35 @@ pub fn check_output_exists(
         }
     }
 }
+
+
+// 🟢 新增：批量过滤未处理的文件
+// 输入：所有待处理的文件路径列表 + 当前样式 ID
+// 输出：仅返回那些“硬盘上还不存在结果图”的文件路径
+#[tauri::command]
+pub fn filter_unprocessed_files(paths: Vec<String>, style: String) -> Vec<String> {
+    // 1. 预先计算后缀 (例如 "_BottomWhite")
+    // 这里保持和你 check_output_exists 一模一样的逻辑，确保判断标准一致
+    let suffix = format!("_{}", style); 
+
+    println!("🔍 [Filter] 开始检查 {} 个文件的重复项 (Style: {})", paths.len(), style);
+
+    // 2. 遍历并过滤
+    let filtered: Vec<String> = paths.into_iter().filter(|path_str| {
+        let path = Path::new(path_str);
+        let parent = path.parent().unwrap_or(Path::new("."));
+        let file_stem = path.file_stem().unwrap_or_default().to_string_lossy();
+        
+        // 构造预期的输出路径
+        let target_filename = format!("{}{}.jpg", file_stem, suffix);
+        let target_path = parent.join(target_filename);
+
+        // 如果文件存在 -> 返回 false (过滤掉)
+        // 如果文件不存在 -> 返回 true (保留，需要处理)
+        !target_path.exists() 
+    }).collect();
+
+    println!("🔍 [Filter] 检查完毕，剩余 {} 个文件需要处理", filtered.len());
+    
+    filtered
+}
