@@ -53,6 +53,8 @@ export const store = reactive({
   progress: { current: 0, total: 0, percent: 0 },
   statusText: "准备就绪",
   statusType: "normal",
+  // 🟢 建议：初始化时就给一个默认选中的 ID，这样打开软件时就不会是空的
+  activePresetId: 'BottomWhite',
   settings: {
     style: 'ClassicWhite',
     shadowIntensity: 40,
@@ -64,6 +66,26 @@ export const store = reactive({
     return MODE_OPTIONS;
   },
 
+  // 🟢 [新增] 切换模式专用动作
+  // 作用：修改模式 -> 获取新列表 -> 自动选中第一个
+  setMode(newMode) {
+    console.log(`[Store] 切换模式到: ${newMode}`);
+    
+    // 1. 修改模式
+    this.settings.style = newMode;
+    
+    // 2. 获取新模式下的预设列表
+    // 注意：这里利用了 getter 自动获取对应列表
+    const presets = this.currentPresets;
+    
+    // 3. 自动选中第一个 (如果有的话)
+    if (presets && presets.length > 0) {
+      this.applyPreset(presets[0]);
+    } else {
+      // 如果新模式下没有预设，重置选中状态
+      this.activePresetId = null;
+    }
+  },
   // 🟢 获取当前模式下的预设列表
   get currentPresets() {
     return PRESET_CONFIGS[this.settings.style] || [];

@@ -94,7 +94,12 @@ const clearAll = () => {
   <div class="panel-body">
     <div class="section">
       <label class="section-title">边框模式 / Mode</label>
-      <select v-model="store.settings.style" class="mode-select">
+      
+      <select 
+        :value="store.settings.style" 
+        @change="(e) => store.setMode(e.target.value)"
+        class="mode-select"
+      >
         <option 
           v-for="opt in store.modeOptions" 
           :key="opt.value" 
@@ -137,6 +142,7 @@ const clearAll = () => {
               </span>
             </div>
           </div>
+          
           <button @click="(e) => removeFile(e, index)" class="del-btn">×</button>
         </div>
       </div>
