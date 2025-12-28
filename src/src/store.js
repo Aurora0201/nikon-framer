@@ -19,7 +19,15 @@ const PRESET_CONFIGS = {
       name: 'Standard White',
       desc: '标准白底 / 简约风格',
       img: 'white_standard.jpg',
-      params: { paddingRatio: 10, shadowIntensity: 0 }
+      
+    },
+
+    {
+      id: 'PolaroidWhite', // 👈 后端收到 { style: "white_std" }
+      name: 'Polaroid White',
+      desc: '宝丽来风格',
+      img: 'polaroid_white.jpg',
+      
     },
   ],
   
@@ -30,14 +38,15 @@ const PRESET_CONFIGS = {
       name: 'Glass / Blur',
       desc: '大师风格 / 背景模糊',
       img: 'transparent_standard.jpg',
-      params: { shadowIntensity: 60, blurRadius: 20 }
+      
     },
+
     {
       id: 'TransparentClassic', // 👈 后端收到 { style: "trans_std" }
       name: 'Classic / Blur',
       desc: '经典效果 / 背景模糊',
       img: 'transparent_classic.jpg',
-      params: { shadowIntensity: 60, blurRadius: 20 }
+      
     },
   ],
 };
