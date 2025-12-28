@@ -1,60 +1,149 @@
-use std::fs;
-use std::path::{Path, PathBuf};
-use image::{DynamicImage, ImageFormat};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::path::{Path, PathBuf};
+use std::fs;
 use once_cell::sync::Lazy;
+use image::{DynamicImage, ImageFormat};
 
+// =========================================================
+// 🟢 Logo 资源管理系统 (Brand & Logo Assets)
+// =========================================================
 
-pub struct BrandLogos {
-    pub icon: Option<DynamicImage>,
-    pub word: Option<DynamicImage>,
-    pub z_symbol: Option<DynamicImage>,
+// 1. 品牌枚举
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Brand {
+    Nikon,
+    Sony,
+    Canon,
+    Fujifilm,
+    Leica,
+    Hasselblad,
+    // ...
 }
 
-pub fn load_brand_logos(make: &str) -> BrandLogos {
-    let make_upper = make.to_uppercase();
-    
-    if make_upper.contains("NIKON") {
-        let icon_data = include_bytes!("../assets/logos/Nikon.png");
-        let word_data = include_bytes!("../assets/logos/Nikon-word.png");
-        
-        let z_data_res = std::panic::catch_unwind(|| {
-            include_bytes!("../assets/logos/Z.png")
-        });
-        
-        let z_img = match z_data_res {
-            Ok(data) => image::load_from_memory_with_format(data, ImageFormat::Png).ok(),
-            Err(_) => None,
-        };
+// 2. Logo 具体描述符
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LogoType {
+    // --- 通用型 ---
+    Wordmark,         // 标准字标 (如 "Nikon", "Sony")
+    WordmarkVertical, // 竖排字标
 
-        BrandLogos {
-            icon: image::load_from_memory_with_format(icon_data, ImageFormat::Png).ok(),
-            word: image::load_from_memory_with_format(word_data, ImageFormat::Png).ok(),
-            z_symbol: z_img,
+    // --- 尼康专属 ---
+    IconYellowBox,    // 尼康小黄块
+    SymbolZ,          // Z 系列 Logo
+    
+    // --- 索尼专属 ---
+    SymbolAlpha,      // α (Alpha) Logo
+    SymbolGMaster,    // G Master Logo
+    
+    // --- 徕卡专属 ---
+    IconRedDot,       // 可乐标 (红)
+    IconBlackDot,     // 黑标
+    
+    // --- 富士专属 ---
+    SymbolGFX,        // GFX 系统标
+    SymbolX,          // X 系统标
+}
+
+// 3. 组合键 (用于 Map 索引)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct LogoKey {
+    brand: Brand,
+    l_type: LogoType,
+}
+
+impl LogoKey {
+    // 🟢 加载逻辑：精确匹配 品牌 + 类型
+    // 注意：目前仅开启 Nikon，其他品牌注释掉以防编译时找不到文件报错
+    fn load_data(&self) -> Option<&'static [u8]> {
+        match (self.brand, self.l_type) {
+            // === Nikon ===
+            (Brand::Nikon, LogoType::Wordmark)      => Some(include_bytes!("../assets/logos/Nikon-word.png")),
+            (Brand::Nikon, LogoType::SymbolZ)       => Some(include_bytes!("../assets/logos/Z.png")),
+            (Brand::Nikon, LogoType::IconYellowBox) => Some(include_bytes!("../assets/logos/Nikon.png")),
+
+            // === Sony (暂未添加文件，注释以防报错) ===
+            // (Brand::Sony, LogoType::Wordmark)    => Some(include_bytes!("../assets/logos/Sony.png")),
+            // (Brand::Sony, LogoType::SymbolAlpha) => Some(include_bytes!("../assets/logos/Alpha.png")),
+
+            // === Leica (暂未添加文件) ===
+            // (Brand::Leica, LogoType::Wordmark)   => Some(include_bytes!("../assets/logos/Leica-Word.png")),
+            // (Brand::Leica, LogoType::IconRedDot) => Some(include_bytes!("../assets/logos/Leica-Red.png")),
+
+            // === Canon (暂未添加文件) ===
+            // (Brand::Canon, LogoType::Wordmark)   => Some(include_bytes!("../assets/logos/Canon.png")),
+
+            // 其他未定义的组合返回 None
+            _ => None,
         }
-    } else {
-        BrandLogos { icon: None, word: None, z_symbol: None }
     }
 }
 
+// 4. Logo 缓存池定义
+// Key: 品牌+类型, Value: 线程安全的图片引用
+type LogoCache = HashMap<LogoKey, Arc<DynamicImage>>;
 
-// 🟢 新增：用于存储真实的资源绝对路径
-// 默认是 None，必须在 main.rs 里初始化
+static LOGO_CACHE: Lazy<Mutex<LogoCache>> = Lazy::new(|| {
+    Mutex::new(HashMap::new())
+});
+
+/// **获取 Logo 资源 (懒加载实现)**
+/// 
+/// 用法: resources::get_logo(Brand::Nikon, LogoType::Wordmark)
+pub fn get_logo(brand: Brand, l_type: LogoType) -> Option<Arc<DynamicImage>> {
+    let key = LogoKey { brand, l_type };
+
+    // A. 第一步：查缓存 (读锁)
+    // 如果缓存里有，直接返回，速度极快
+    {
+        let cache = LOGO_CACHE.lock().unwrap();
+        if let Some(img) = cache.get(&key) {
+            return Some(img.clone());
+        }
+    }
+
+    // B. 第二步：缓存未命中，执行加载
+    // 这一步涉及文件解码，相对耗时
+    if let Some(data) = key.load_data() {
+        println!("📦 [Resources] 首次加载 Logo: {:?} - {:?}", brand, l_type);
+        
+        // 解码图片 (支持 png, jpg 等格式)
+        if let Ok(img) = image::load_from_memory(data) {
+            let arc_img = Arc::new(img);
+            
+            // C. 第三步：写入缓存 (写锁)
+            let mut cache = LOGO_CACHE.lock().unwrap();
+            cache.insert(key, arc_img.clone());
+            
+            return Some(arc_img);
+        } else {
+            eprintln!("❌ [Resources] 图片解码失败: {:?} - {:?}", brand, l_type);
+        }
+    } else {
+        // 如果 load_data 返回 None (说明该品牌该类型没有定义资源)
+        // 可以在这里打印日志方便调试
+        // println!("⚠️ [Resources] 未定义的 Logo 资源: {:?} - {:?}", brand, l_type);
+    }
+
+    None
+}
+
+// =========================================================
+// 🟢 字体资源管理系统 (Font Assets) - 保持不变以维持功能
+// =========================================================
+
+// 用于存储真实的资源绝对路径 (由 setup.rs 初始化)
 static FONT_BASE_DIR: Lazy<Mutex<Option<PathBuf>>> = Lazy::new(|| {
     Mutex::new(None)
 });
 
-// 🟢 新增：初始化函数 (将在 main.rs 中调用)
+// 初始化函数
 pub fn init_font_path(path: PathBuf) {
     let mut dir = FONT_BASE_DIR.lock().unwrap();
     *dir = Some(path);
     println!("✅ [Resources] 字体路径已初始化");
 }
 
-
-// 🟢 1. 定义字体家族 (对应你实际拥有的字体系列)
-// 以后加新字体，就在这里加名字，不用管它用来做什么
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FontFamily {
     InterDisplay,  // 现代无衬线
@@ -62,7 +151,6 @@ pub enum FontFamily {
     AbhayaLibre,   // 衬线体
 }
 
-// 🟢 2. 定义字重
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FontWeight {
     Regular,
@@ -76,24 +164,14 @@ struct FontKey {
     weight: FontWeight,
 }
 
-// 🟢 3. 文件名映射逻辑 (核心配置中心)
-// 根据 Family + Weight -> 找到对应的文件名
 impl FontKey {
     fn filename(&self) -> &'static str {
         match (self.family, self.weight) {
-            // --- Inter Display (OTF) ---
             (FontFamily::InterDisplay, FontWeight::Bold)   => "InterDisplay-Bold.otf",
             (FontFamily::InterDisplay, FontWeight::Medium) => "InterDisplay-Medium.otf",
-            // Inter 的 fallback: 如果要 Regular 或者其他未定义的，都用 Regular
             (FontFamily::InterDisplay, _)                  => "InterDisplay-Regular.otf",
-
-            // --- MrDafoe (TTF) ---
-            // 手写体通常只有一种字重，无论要什么都给 Regular
-            (FontFamily::MrDafoe, _) => "MrDafoe-Regular.ttf",
-
-            // --- AbhayaLibre (TTF) ---
-            // 你只有 Medium，所以无论要什么都给 Medium
-            (FontFamily::AbhayaLibre, _) => "AbhayaLibre-Medium.ttf",
+            (FontFamily::MrDafoe, _)                       => "MrDafoe-Regular.ttf",
+            (FontFamily::AbhayaLibre, _)                   => "AbhayaLibre-Medium.ttf",
         }
     }
 }
@@ -105,8 +183,6 @@ static FONT_CACHE: Lazy<Mutex<FontCache>> = Lazy::new(|| {
 });
 
 /// **获取字体资源**
-/// 
-/// 用法: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold)
 pub fn get_font(family: FontFamily, weight: FontWeight) -> Arc<Vec<u8>> {
     let key = FontKey { family, weight };
 
@@ -118,9 +194,12 @@ pub fn get_font(family: FontFamily, weight: FontWeight) -> Arc<Vec<u8>> {
 
     // 2. 加载文件
     let filename = key.filename();
-    // 假设你的字体都在 src-tauri/assets/fonts/ 下 (根据你的截图调整路径)
-    // ⚠️ 注意：根据你的截图，文件夹是 `assets/fonts`，请确认路径
-    let path = Path::new("assets/fonts").join(filename);
+    
+    // 使用全局初始化的路径
+    let base_dir_guard = FONT_BASE_DIR.lock().unwrap();
+    // 兜底逻辑：如果未初始化(如测试环境)，尝试相对路径
+    let folder = base_dir_guard.as_deref().unwrap_or(Path::new("assets/fonts"));
+    let path = folder.join(filename);
     
     println!("📦 [LazyLoad] Font: {:?} -> {:?}", key, path);
 

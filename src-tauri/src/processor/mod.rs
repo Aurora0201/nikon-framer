@@ -1,19 +1,20 @@
-// src-tauri/src/processor/mod.rs
-
 pub mod white;
 pub mod blur;
 pub mod traits;
 pub mod master;
 
-use std::sync::Arc; // 🟢 引入 Arc 用于共享只读资源
+use std::sync::Arc;
 use image::{DynamicImage, ImageBuffer, Rgba, imageops};
 use ab_glyph::FontRef; 
 
 use crate::models::StyleOptions;
-use crate::processor::traits::FrameProcessor;
+// 假设你在 traits.rs 里定义了 FrameProcessor，如果叫 FrameProcessor 请自行替换
+use crate::processor::traits::FrameProcessor; 
 
-// 🟢 引入重构后的 resources 模块 (包含 FontFamily, FontWeight)
-use crate::resources::{self, FontFamily, FontWeight};
+// 引入重构后的 resources 模块
+use crate::resources::{self, FontFamily, FontWeight, Brand, LogoType};
+use crate::processor::white::WhiteStyleResources;
+use crate::processor::blur::BlurStyleResources;
 
 // --- 公共辅助结构与函数 ---
 
@@ -58,24 +59,77 @@ pub fn clean_model_name(make: &str, model: &str) -> String {
     no_make
 }
 
+// 🟢 辅助函数：解析品牌字符串为枚举
+fn parse_brand(make: &str) -> Option<Brand> {
+    let m = make.to_lowercase();
+    if m.contains("nikon") {
+        Some(Brand::Nikon)
+    } else if m.contains("sony") {
+        Some(Brand::Sony)
+    } else if m.contains("canon") {
+        Some(Brand::Canon)
+    } else if m.contains("fujifilm") || m.contains("fuji") {
+        Some(Brand::Fujifilm)
+    } else if m.contains("leica") {
+        Some(Brand::Leica)
+    } else if m.contains("hasselblad") {
+        Some(Brand::Hasselblad)
+    } else {
+        None
+    }
+}
+
 // ==========================================
 // 策略 1: 白底处理器 (BottomWhite)
 // ==========================================
 struct BottomWhiteProcessor {
-    // 🟢 使用 Arc<Vec<u8>>，直接指向全局缓存，零拷贝
     pub font_data: Arc<Vec<u8>>,
 }
 
 impl FrameProcessor for BottomWhiteProcessor {
     fn process(&self, img: &DynamicImage, make: &str, model: &str, params: &str) -> Result<DynamicImage, String> {
-        // 直接从 Arc 内存中解析 FontRef
         let font = FontRef::try_from_slice(&self.font_data)
             .map_err(|_| "白底模式: 标准字体解析失败")?;
         
-        let logos = resources::load_brand_logos(make);
+        // 🟢 1. 解析品牌并获取资源
+        let brand = parse_brand(make);
         
-        // 白底模式强制使用 Bold
-        Ok(white::process(img, make, model, params, &font, "Bold", &logos))
+        let assets = if let Some(b) = brand {
+            match b {
+                Brand::Nikon => WhiteStyleResources {
+                    main_logo:  resources::get_logo(b, LogoType::Wordmark),
+                    sub_logo:   resources::get_logo(b, LogoType::SymbolZ),       
+                    badge_icon: resources::get_logo(b, LogoType::IconYellowBox), 
+                },
+                Brand::Sony => WhiteStyleResources {
+                    main_logo:  resources::get_logo(b, LogoType::Wordmark),
+                    sub_logo:   resources::get_logo(b, LogoType::SymbolAlpha),   
+                    badge_icon: None, 
+                },
+                Brand::Leica => WhiteStyleResources {
+                    main_logo:  resources::get_logo(b, LogoType::Wordmark),
+                    sub_logo:   None,
+                    badge_icon: resources::get_logo(b, LogoType::IconRedDot),    
+                },
+                Brand::Canon => WhiteStyleResources {
+                    main_logo:  resources::get_logo(b, LogoType::Wordmark),
+                    sub_logo:   None,
+                    badge_icon: None,
+                },
+                // 其他品牌只显示主标
+                _ => WhiteStyleResources {
+                    main_logo: resources::get_logo(b, LogoType::Wordmark),
+                    sub_logo: None,
+                    badge_icon: None,
+                }
+            }
+        } else {
+            // 未知品牌，空资源
+            WhiteStyleResources { main_logo: None, sub_logo: None, badge_icon: None }
+        };
+
+        // 🟢 2. 调用 white::process
+        Ok(white::process(img, make, model, params, &font, "Bold", &assets))
     }
 }
 
@@ -83,7 +137,6 @@ impl FrameProcessor for BottomWhiteProcessor {
 // 策略 2: 模糊处理器 (Blur)
 // ==========================================
 pub struct TransparentClassicProcessor {
-    // 🟢 使用 Arc
     pub font_data: Arc<Vec<u8>>,
     pub shadow: f32,
 }
@@ -93,9 +146,31 @@ impl FrameProcessor for TransparentClassicProcessor {
         let font = FontRef::try_from_slice(&self.font_data)
             .map_err(|_| "模糊模式: 标准字体解析失败")?;
             
-        let logos = resources::load_brand_logos(make);
+        // 🟢 1. 解析品牌并获取资源
+        let brand = parse_brand(make);
         
-        Ok(blur::process(img, make, model, params, &font, "Bold", self.shadow, &logos))
+        let assets = if let Some(b) = brand {
+            match b {
+                Brand::Nikon => BlurStyleResources {
+                    main_logo: resources::get_logo(b, LogoType::Wordmark),
+                    sub_logo:  resources::get_logo(b, LogoType::SymbolZ),
+                },
+                Brand::Sony => BlurStyleResources {
+                    main_logo: resources::get_logo(b, LogoType::Wordmark),
+                    sub_logo:  resources::get_logo(b, LogoType::SymbolAlpha),
+                },
+                // 其他品牌只显示主标
+                _ => BlurStyleResources {
+                    main_logo: resources::get_logo(b, LogoType::Wordmark),
+                    sub_logo: None,
+                }
+            }
+        } else {
+            BlurStyleResources { main_logo: None, sub_logo: None }
+        };
+        
+        // 🟢 2. 调用 blur::process
+        Ok(blur::process(img, make, model, params, &font, "Bold", self.shadow, &assets))
     }
 }
 
@@ -103,7 +178,6 @@ impl FrameProcessor for TransparentClassicProcessor {
 // 策略 3: 大师处理器 (Master)
 // ==========================================
 pub struct TransparentMasterProcessor {
-    // 🟢 持有三个不同字体的 Arc 指针
     pub main_font: Arc<Vec<u8>>,   // 参数字体
     pub script_font: Arc<Vec<u8>>, // 手写体
     pub serif_font: Arc<Vec<u8>>,  // 标题体
@@ -116,7 +190,7 @@ impl FrameProcessor for TransparentMasterProcessor {
         let main = FontRef::try_from_slice(&self.main_font)
             .map_err(|_| "Master模式: 主字体解析失败".to_string())?;
 
-        // 2. 解析手写体 (回退机制：如果失败使用主字体)
+        // 2. 解析手写体
         let script = FontRef::try_from_slice(&self.script_font)
             .unwrap_or_else(|_| {
                 println!("⚠️ Master模式: 手写体解析失败，回退");
@@ -130,7 +204,7 @@ impl FrameProcessor for TransparentMasterProcessor {
                 main.clone()
             });
 
-        // 4. 绘制
+        // 4. 绘制 (Master 模式不需要 Brand Logo)
         let result_img = master::process(
             img, 
             params, 
@@ -150,16 +224,14 @@ impl FrameProcessor for TransparentMasterProcessor {
 pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send + Sync> {
     match options {
         
-        // 🟢 极简白底模式
-        // 设计决策: 使用 InterDisplay Bold，现代且清晰
+        // 极简白底模式
         StyleOptions::BottomWhite => {
             Box::new(BottomWhiteProcessor { 
                 font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold) 
             })
         },
 
-        // 🟢 高斯模糊模式
-        // 设计决策: 同上，保持一致性
+        // 高斯模糊模式
         StyleOptions::TransparentClassic { shadow_intensity } => {
             Box::new(TransparentClassicProcessor { 
                 font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold),
@@ -167,16 +239,11 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
             })
         },
 
-        // 🟢 大师模式 (精心搭配的字体组合)
+        // 大师模式
         StyleOptions::TransparentMaster => {
             Box::new(TransparentMasterProcessor {
-                // 1. 参数数值: InterDisplay Medium (比 Bold 稍微精致一点，更有高级感)
                 main_font: resources::get_font(FontFamily::InterDisplay, FontWeight::Medium),
-                
-                // 2. 手写体: MrDafoe (艺术签名感)
                 script_font: resources::get_font(FontFamily::MrDafoe, FontWeight::Regular),
-                
-                // 3. 标题小字: AbhayaLibre (衬线体，显得正式、经典)
                 serif_font: resources::get_font(FontFamily::AbhayaLibre, FontWeight::Medium),
             })
         },

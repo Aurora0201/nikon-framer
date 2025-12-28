@@ -1,11 +1,21 @@
 use image::{DynamicImage, GenericImageView, Rgba, imageops};
 use ab_glyph::{FontRef, PxScale};
 use std::time::Instant;
+use std::sync::Arc;
 
-use crate::resources::BrandLogos;
 use crate::graphics;
 // 引入父模块公共工具
 use super::{clean_model_name, resize_image_by_height};
+
+// 🟢 [关键修改] 定义模糊模板所需的资源槽位
+// 模糊模式通常不需要 badge_icon (左上角小标)，只需要中间的主副标
+pub struct BlurStyleResources {
+    // 对应主Logo位置 (如 "Nikon", "Sony")
+    pub main_logo: Option<Arc<DynamicImage>>, 
+    
+    // 对应副Logo位置 (如 "Z", "Alpha")
+    pub sub_logo:  Option<Arc<DynamicImage>>, 
+}
 
 /// 内部配置结构体：统一管理参数
 struct BlurConfig {
@@ -25,12 +35,11 @@ struct BlurConfig {
     text_block_centering_ratio: f32, // 文字块整体垂直居中比例
 
     // --- Logo 与 机型文字微调 ---
-    logo_word_scale: f32,  // "Nikon" 单词大小比例
-    logo_z_scale: f32,     // "Z" Logo 大小比例
+    logo_main_scale: f32,  // 主Logo大小比例 (原 word)
+    logo_sub_scale: f32,   // 副Logo大小比例 (原 z)
     model_text_scale: f32, // 机型文字大小比例
     
-    // 🟢 [关键修改] 机型数字(如"50")的独立垂直偏移比例
-    // 正数表示向下移，负数向上移
+    // 机型数字(如"50")的独立垂直偏移比例
     model_text_y_shift_ratio: f32, 
 }
 
@@ -49,14 +58,11 @@ impl Default for BlurConfig {
             line_gap_ratio: 0.12,
             text_block_centering_ratio: 0.5,
 
-            // Logo 比例保持您之前的设定
-            logo_word_scale: 0.8,
-            logo_z_scale: 0.6,
+            logo_main_scale: 0.8,
+            logo_sub_scale: 0.6,
             model_text_scale: 0.65,
 
-            // 🟢 在这里调整 "50" 的位置
-            // 0.05 是一个相对边框宽度的比例，您可以根据视觉效果微调
-            // 比如边框是 300px，0.05 大约就是下移 15px
+            // 0.10 大约下移 15px (视分辨率而定)
             model_text_y_shift_ratio: 0.10, 
         }
     }
@@ -70,7 +76,7 @@ pub fn process(
     font: &FontRef,
     font_weight: &str,
     shadow_intensity: f32,
-    logos: &BrandLogos 
+    assets: &BlurStyleResources // 🟢 接收通用的资源包
 ) -> DynamicImage {
     // 初始化配置
     let cfg = BlurConfig::default();
@@ -139,28 +145,31 @@ pub fn process(
         let base_h = font_size_model * 1.2; 
 
         // 使用配置参数
-        let h_word = (base_h * cfg.logo_word_scale) as u32;
-        let h_z    = (base_h * cfg.logo_z_scale) as u32;
+        let h_main = (base_h * cfg.logo_main_scale) as u32;
+        let h_sub  = (base_h * cfg.logo_sub_scale) as u32;
         let s_text = base_h * cfg.model_text_scale;
 
         let spacing = (font_size_model * 0.3) as u32; 
         let mut total_w = 0;
 
-        // --- 预计算宽度 ---
-        let scaled_word = if let Some(w) = &logos.word {
-            let white_w = graphics::make_image_white(w);
-            let s = resize_image_by_height(&white_w, h_word);
+        // --- A. 预处理资源 (转白 + 缩放) ---
+        // 🟢 处理主Logo
+        let scaled_main = if let Some(logo) = &assets.main_logo {
+            let white_img = graphics::make_image_white(logo); // Arc 自动解引用
+            let s = resize_image_by_height(&white_img, h_main);
             total_w += s.width() + spacing;
             Some(s)
         } else { None };
 
-        let scaled_z = if let Some(z) = &logos.z_symbol {
-            let white_z = graphics::make_image_white(z);
-            let s = resize_image_by_height(&white_z, h_z);
+        // 🟢 处理副Logo
+        let scaled_sub = if let Some(logo) = &assets.sub_logo {
+            let white_img = graphics::make_image_white(logo);
+            let s = resize_image_by_height(&white_img, h_sub);
             total_w += s.width() + spacing;
             Some(s)
         } else { None };
 
+        // 🟢 处理文字
         let model_str = clean_model_name(camera_make, camera_model);
         let text_img = if !model_str.is_empty() {
             let img = graphics::generate_skewed_text_high_quality(
@@ -170,39 +179,40 @@ pub fn process(
             Some(img)
         } else { None };
 
-        // --- 绘制元素 ---
+        // --- B. 绘制元素 ---
         let mut current_x = (canvas_w as i32 - total_w as i32) / 2;
         let row_center_y = line1_y + (font_size_model as i32 / 2);
 
-        // A. Nikon Logo
-        if let Some(img) = scaled_word {
+        // 1. 绘制 Main Logo
+        if let Some(img) = scaled_main {
             let y = row_center_y - (img.height() as i32 / 2);
             imageops::overlay(&mut canvas, &img, current_x as i64, y as i64);
             current_x += img.width() as i32 + spacing as i32;
         }
 
-        // B. Z Logo
-        let mut z_bottom_y = 0;
-        if let Some(img) = scaled_z {
+        // 2. 绘制 Sub Logo
+        let mut sub_bottom_y = 0;
+        if let Some(img) = scaled_sub {
             let y = row_center_y - (img.height() as i32 / 2);
             imageops::overlay(&mut canvas, &img, current_x as i64, y as i64);
-            z_bottom_y = y + img.height() as i32;
+            sub_bottom_y = y + img.height() as i32;
             current_x += img.width() as i32 + spacing as i32;
         }
 
-        // C. 机型数字 (如 "50")
+        // 3. 绘制机型文字
         if let Some(img) = text_img {
-            // 计算基础 Y 坐标 (底部对齐 Z Logo 或 垂直居中)
-            let base_y = if z_bottom_y > 0 {
-                z_bottom_y - img.height() as i32
+            // 计算基础 Y 坐标 (如果有副Logo，则与副Logo底部对齐；否则垂直居中)
+            let base_y = if sub_bottom_y > 0 {
+                sub_bottom_y - img.height() as i32
             } else {
                 row_center_y - (img.height() as i32 / 2)
             };
 
-            // 🟢 [关键修改] 应用额外的垂直偏移
+            // 应用额外的垂直偏移
             let extra_offset = (border_size as f32 * cfg.model_text_y_shift_ratio) as i32;
             let final_y = base_y + extra_offset;
 
+            // 微调 X 坐标 (减少与 Logo 的间距)
             let x = current_x - 10; 
             imageops::overlay(&mut canvas, &img, x as i64, final_y as i64);
         }
