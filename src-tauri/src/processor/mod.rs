@@ -12,7 +12,8 @@ use crate::models::StyleOptions;
 use crate::processor::traits::FrameProcessor; 
 
 // 引入重构后的 resources 模块
-use crate::resources::{self, FontFamily, FontWeight, Brand, LogoType};
+use crate::resources::fonts::{self, FontFamily, FontWeight};
+use crate::resources::brandLogos::{self, Brand, LogoType};
 use crate::processor::white::WhiteStyleResources;
 use crate::processor::blur::BlurStyleResources;
 
@@ -97,28 +98,13 @@ impl FrameProcessor for BottomWhiteProcessor {
         let assets = if let Some(b) = brand {
             match b {
                 Brand::Nikon => WhiteStyleResources {
-                    main_logo:  resources::get_logo(b, LogoType::Wordmark),
-                    sub_logo:   resources::get_logo(b, LogoType::SymbolZ),       
-                    badge_icon: resources::get_logo(b, LogoType::IconYellowBox), 
-                },
-                Brand::Sony => WhiteStyleResources {
-                    main_logo:  resources::get_logo(b, LogoType::Wordmark),
-                    sub_logo:   resources::get_logo(b, LogoType::SymbolAlpha),   
-                    badge_icon: None, 
-                },
-                Brand::Leica => WhiteStyleResources {
-                    main_logo:  resources::get_logo(b, LogoType::Wordmark),
-                    sub_logo:   None,
-                    badge_icon: resources::get_logo(b, LogoType::IconRedDot),    
-                },
-                Brand::Canon => WhiteStyleResources {
-                    main_logo:  resources::get_logo(b, LogoType::Wordmark),
-                    sub_logo:   None,
-                    badge_icon: None,
+                    main_logo:  brandLogos::get_logo(b, LogoType::Wordmark),
+                    sub_logo:   brandLogos::get_logo(b, LogoType::SymbolZ),       
+                    badge_icon: brandLogos::get_logo(b, LogoType::IconYellowBox), 
                 },
                 // 其他品牌只显示主标
                 _ => WhiteStyleResources {
-                    main_logo: resources::get_logo(b, LogoType::Wordmark),
+                    main_logo: brandLogos::get_logo(b, LogoType::Wordmark),
                     sub_logo: None,
                     badge_icon: None,
                 }
@@ -152,16 +138,16 @@ impl FrameProcessor for TransparentClassicProcessor {
         let assets = if let Some(b) = brand {
             match b {
                 Brand::Nikon => BlurStyleResources {
-                    main_logo: resources::get_logo(b, LogoType::Wordmark),
-                    sub_logo:  resources::get_logo(b, LogoType::SymbolZ),
+                    main_logo: brandLogos::get_logo(b, LogoType::Wordmark),
+                    sub_logo:  brandLogos::get_logo(b, LogoType::SymbolZ),
                 },
                 Brand::Sony => BlurStyleResources {
-                    main_logo: resources::get_logo(b, LogoType::Wordmark),
-                    sub_logo:  resources::get_logo(b, LogoType::SymbolAlpha),
+                    main_logo: brandLogos::get_logo(b, LogoType::Wordmark),
+                    sub_logo:  brandLogos::get_logo(b, LogoType::SymbolAlpha),
                 },
                 // 其他品牌只显示主标
                 _ => BlurStyleResources {
-                    main_logo: resources::get_logo(b, LogoType::Wordmark),
+                    main_logo: brandLogos::get_logo(b, LogoType::Wordmark),
                     sub_logo: None,
                 }
             }
@@ -227,14 +213,14 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
         // 极简白底模式
         StyleOptions::BottomWhite => {
             Box::new(BottomWhiteProcessor { 
-                font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold) 
+                font_data: fonts::get_font(FontFamily::InterDisplay, FontWeight::Bold) 
             })
         },
 
         // 高斯模糊模式
         StyleOptions::TransparentClassic { shadow_intensity } => {
             Box::new(TransparentClassicProcessor { 
-                font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold),
+                font_data: fonts::get_font(FontFamily::InterDisplay, FontWeight::Bold),
                 shadow: *shadow_intensity 
             })
         },
@@ -242,9 +228,9 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
         // 大师模式
         StyleOptions::TransparentMaster => {
             Box::new(TransparentMasterProcessor {
-                main_font: resources::get_font(FontFamily::InterDisplay, FontWeight::Medium),
-                script_font: resources::get_font(FontFamily::MrDafoe, FontWeight::Regular),
-                serif_font: resources::get_font(FontFamily::AbhayaLibre, FontWeight::Medium),
+                main_font: fonts::get_font(FontFamily::InterDisplay, FontWeight::Medium),
+                script_font: fonts::get_font(FontFamily::MrDafoe, FontWeight::Regular),
+                serif_font: fonts::get_font(FontFamily::AbhayaLibre, FontWeight::Medium),
             })
         },
         
