@@ -3,56 +3,40 @@ import { ref, computed, onUnmounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { store } from '../store.js';
 
-// 🟢 辅助函数：构建上下文 (重构版)
-// 原则：后端接管审美，前端不再发送字体配置，只发送模式特有的必要参数。
+// 🟢 辅助函数：构建上下文 (极简版)
+// 逻辑：直接获取当前选中的预设 ID，作为 style 发送给后端
+// 因为你已经确保了 PRESET_CONFIGS 里的 id 与后端 Enum Variant 一一对应
 function buildBatchContext() {
-  const currentStyle = store.settings.style;
+  let targetStyleId = store.activePresetId;
 
-  // 1. 极简白底 (BottomWhite)
-  // 后端定义: StyleOptions::BottomWhite (Unit Variant)
-  if (currentStyle === 'BottomWhite') {
-    return { 
-      style: 'BottomWhite' 
-    };
+  // 🛡️ 容错处理：如果用户刚打开软件，还没点击任何预设卡片
+  // 我们需要自动获取当前模式下的第一个预设 ID 作为默认值
+  if (!targetStyleId) {
+    const currentPresets = store.currentPresets;
+    if (currentPresets && currentPresets.length > 0) {
+      targetStyleId = currentPresets[0].id;
+    }
   }
 
-  // 2. 高斯模糊 (GaussianBlur)
-  // 后端定义: StyleOptions::GaussianBlur { shadow_intensity: f32 }
-  if (currentStyle === 'GaussianBlur') {
-    return {
-      style: 'GaussianBlur',
-      // 确保转为浮点数，符合 Rust f32 类型
-      shadowIntensity: parseFloat(store.settings.shadowIntensity) || 0.0
-    };
+  // 🛡️ 最终兜底：如果连列表都是空的（极少见），使用你的默认白底 ID
+  if (!targetStyleId) {
+    console.warn("⚠️ [Batch] 未找到有效的 Style ID，使用默认兜底值");
+    return { style: 'BottomWhite' }; 
   }
 
-  // 3. 大师模式 (Master)
-  // 后端定义: StyleOptions::Master (Unit Variant)
-  // 字体由后端 MasterProcessor 内部加载，前端无需关心
-  if (currentStyle === 'Master') {
-    return { 
-      style: 'Master' 
-    };
-  }
+  console.log(`🔧 [Batch] 锁定后端 Style ID: ${targetStyleId}`);
 
-  // 🚀 未来预留：自定义模式 (Custom)
-  // 只有在这个模式下，我们才恢复发送 fontConfig
-  /*
-  if (currentStyle === 'Custom') {
-    return {
-      style: 'Custom',
-      font: {
-        filename: store.settings.font,
-        weight: store.settings.weight
-      }
-    };
-  }
-  */
-
-  // 默认兜底
-  console.warn("未知的样式，回退到默认参数");
+  // 🟢 核心逻辑：
+  // 根据目前的协议，我们只发送 style ID。
+  // 虽然 Store 里有 shadowIntensity 等参数，但既然我们要遵守“后端接管审美”，
+  // 这里暂时不发送这些参数，除非你的后端接口明确要求接收它们。
+  
+  // 如果是 GaussianBlur，且后端接口定义为 { style: 'GaussianBlur', shadowIntensity: f32 }
+  // 你需要解开下面的注释并做判断。
+  // 但根据你的指示“后端通过唯一的参数 style 来确定”，我们保持最简：
+  
   return { 
-    style: 'BottomWhite' 
+    style: targetStyleId 
   };
 }
 
@@ -95,16 +79,20 @@ export function useBatchProcess() {
     // 1. 获取文件路径
     const filePaths = store.fileQueue.map(f => f.path);
 
-    // 🟢 2. 动态构建 Context (使用瘦身后的辅助函数)
-    // 这里生成的对象结构，必须严格匹配 Rust 后端的 Enum 定义
+    // 🟢 2. 动态构建 Context
     const contextPayload = buildBatchContext();
-    console.log("📦 [V2] 发送 Payload:", contextPayload);
+    
+    console.log("📦 [Batch] 最终发送 Payload:", JSON.stringify(contextPayload, null, 2));
 
     // 更新状态
     store.isProcessing = true;
     canStop.value = false;
     store.setStatus("准备开始批处理...", "loading");
+    
+    // 重置进度
     store.progress.percent = 0;
+    store.progress.current = 0;
+    store.progress.total = filePaths.length;
 
     // 启动计时器 (3秒后允许终止)
     if (stopTimer) clearTimeout(stopTimer);

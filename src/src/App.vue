@@ -1,78 +1,111 @@
 <script setup>
-import { store } from './store.js';
+import { onMounted } from 'vue';
+// 确保路径正确，对应你新建的 layout 文件夹
+import ResourcePanel from './components/layouts/ResourcePanel.vue';
+import PresetPanel from './components/layouts/PresetPanel.vue';
+import WorkspacePanel from './components/layouts/WorkspacePanel.vue';
+import StatusBar from './components/layouts/StatusBar.vue';
+import { useGlobalEvents } from './composables/useGlobalEvents';
 
-// 组件
-import ControlPanel from './components/ControlPanel.vue';
-import FileList from './components/FileList.vue';
-import StatusBar from './components/StatusBar.vue';
-import PreviewModal from './components/PreviewModal.vue';
-import DebugTools from './components/DebugTools.vue';
+onMounted(() => {
+  document.addEventListener('dragstart', (e) => e.preventDefault());
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+});
 
-// 🟢 引入组合式函数 (Hooks)
-import { useGlobalEvents } from './composables/useGlobalEvents.js';
-import { useBatchProcess } from './composables/useBatchProcess.js';
-
-// 1. 激活全局事件监听 (一行代码搞定所有拖拽、进度监听)
 useGlobalEvents();
-
-// 2. 获取按钮逻辑 (将复杂的 UI 逻辑解耦)
-const { 
-  handleBatchClick, 
-  buttonText, 
-  buttonClass, 
-  buttonCursor 
-} = useBatchProcess();
-
 </script>
 
 <template>
-  <h1>NIKON <span>Z</span> FRAMER</h1>
+  <div class="app-layout">
+    <div class="main-viewport">
+      
+      <aside class="panel col-1">
+        <ResourcePanel />
+      </aside>
 
-  <div class="control-group">
-    <ControlPanel />
-    
-    <FileList />
+      <aside class="panel col-2">
+        <PresetPanel />
+      </aside>
 
-    <button 
-      id="start-batch-btn"
-      @click="handleBatchClick"
-      :disabled="!store.isProcessing && store.fileQueue.length === 0"
-      :class="buttonClass"
-      :style="{ cursor: buttonCursor }"
-    >
-      {{ buttonText }}
-    </button>
+      <section class="panel col-3">
+        <WorkspacePanel />
+      </section>
+
+    </div>
+
+    <footer class="bottom-bar">
+      <StatusBar />
+    </footer>
   </div>
-  
-  <StatusBar />
-  <PreviewModal />
-  <DebugTools />
 </template>
 
 <style scoped>
-/* 按钮样式依然保留在这里，或者移到全局 styles.css */
-button.processing-mode {
-  background-color: #666;
-  border-color: #555;
-  color: #ccc;
-  opacity: 0.8;
+/* 🟢 1. 全局布局容器 */
+.app-layout {
+  width: 100vw;
+  height: 100vh;
+  background-color: #121212;
+  color: #e0e0e0;
+  
+  /* 关键布局：纵向排列 */
+  display: flex;
+  flex-direction: column;
+  
+  /* 间距控制 */
+  padding: 12px; /* 窗口四周留白 */
+  gap: 12px;     /* 上下两部分的间距 */
+  
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
-button.can-stop {
-  background-color: #3e1f1f;
-  border-color: #ff4444;
-  color: #ff4444;
-  animation: pulse-red 2s infinite;
+/* 🟢 2. 主体视口 (Grid 布局) */
+.main-viewport {
+  /* 自动占据剩余高度 */
+  flex: 1; 
+  /* ⚠️ 关键：防止 flex 子元素溢出导致无法滚动 */
+  min-height: 0; 
+  
+  display: grid;
+  grid-template-columns: 240px 220px minmax(0, 1fr);
+  gap: 2px;
+  
+  /* 容器样式 */
+  background-color: #000;
+  border: 1px solid #333;
+  border-radius: 6px;
+  overflow: hidden;
 }
 
-button.can-stop:hover {
-  background-color: #ff4444;
-  color: white;
+/* --- 面板通用样式 --- */
+.panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+  /* 既然状态栏不悬浮了，这里不需要额外的 padding-bottom */
+  padding-bottom: 0; 
 }
 
-@keyframes pulse-red {
-  0% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(255, 68, 68, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(255, 68, 68, 0); }
+.col-1 { background-color: #1a1a1a; border-right: 1px solid #2a2a2a; }
+.col-2 { background-color: #141414; border-right: 1px solid #2a2a2a; }
+.col-3 { background-color: #0b0b0b; position: relative; }
+
+/* 🟢 3. 沉底状态栏 (Docked Footer) */
+.bottom-bar {
+  /* 固定高度 */
+  height: 50px; 
+  flex-shrink: 0; /* 禁止被压缩 */
+  
+  /* 视觉样式：与上面的主面板保持一致的质感 */
+  background-color: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  
+  /* 不再需要 absolute, backdrop-filter 或 z-index */
 }
 </style>

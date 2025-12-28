@@ -82,13 +82,13 @@ impl FrameProcessor for BottomWhiteProcessor {
 // ==========================================
 // 策略 2: 模糊处理器 (Blur)
 // ==========================================
-pub struct BlurProcessor {
+pub struct TransparentClassicProcessor {
     // 🟢 使用 Arc
     pub font_data: Arc<Vec<u8>>,
     pub shadow: f32,
 }
 
-impl FrameProcessor for BlurProcessor {
+impl FrameProcessor for TransparentClassicProcessor {
     fn process(&self, img: &DynamicImage, make: &str, model: &str, params: &str) -> Result<DynamicImage, String> {
         let font = FontRef::try_from_slice(&self.font_data)
             .map_err(|_| "模糊模式: 标准字体解析失败")?;
@@ -102,14 +102,14 @@ impl FrameProcessor for BlurProcessor {
 // ==========================================
 // 策略 3: 大师处理器 (Master)
 // ==========================================
-pub struct MasterProcessor {
+pub struct TransparentMasterProcessor {
     // 🟢 持有三个不同字体的 Arc 指针
     pub main_font: Arc<Vec<u8>>,   // 参数字体
     pub script_font: Arc<Vec<u8>>, // 手写体
     pub serif_font: Arc<Vec<u8>>,  // 标题体
 }
 
-impl FrameProcessor for MasterProcessor {
+impl FrameProcessor for TransparentMasterProcessor {
     fn process(&self, img: &DynamicImage, _make: &str, _model: &str, params: &str) -> Result<DynamicImage, String> {
         
         // 1. 解析主字体 (参数数值)
@@ -160,16 +160,16 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
 
         // 🟢 高斯模糊模式
         // 设计决策: 同上，保持一致性
-        StyleOptions::GaussianBlur { shadow_intensity } => {
-            Box::new(BlurProcessor { 
+        StyleOptions::TransparentClassic { shadow_intensity } => {
+            Box::new(TransparentClassicProcessor { 
                 font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold),
                 shadow: *shadow_intensity 
             })
         },
 
         // 🟢 大师模式 (精心搭配的字体组合)
-        StyleOptions::Master => {
-            Box::new(MasterProcessor {
+        StyleOptions::TransparentMaster => {
+            Box::new(TransparentMasterProcessor {
                 // 1. 参数数值: InterDisplay Medium (比 Bold 稍微精致一点，更有高级感)
                 main_font: resources::get_font(FontFamily::InterDisplay, FontWeight::Medium),
                 
