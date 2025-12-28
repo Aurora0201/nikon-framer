@@ -1,10 +1,11 @@
 use tauri::{State, Window, Emitter};
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::{Arc, atomic::{AtomicUsize, Ordering}}; // 🟢 新增 AtomicUsize
 use std::time::Instant;
 use std::path::Path;
 use crate::models::BatchContext;
 use crate::state::AppState;
-use crate::{processor, metadata}; // 引用根模块
+use crate::{processor, metadata}; 
+use rayon::prelude::*; // 🟢 必须引入
 
 #[tauri::command]
 pub async fn start_batch_process_v2(
@@ -14,104 +15,116 @@ pub async fn start_batch_process_v2(
     context: BatchContext,
 ) -> Result<String, String> {
     
-    // 1. 初始化状态
-    println!("🚀 [API V2] 启动批处理 ({} 个文件)", file_paths.len());
-    state.should_stop.store(false, Ordering::Relaxed);
+    println!("🚀 [API V2] 启动并行批处理 ({} 个文件)", file_paths.len());
+    
+    // 1. 获取主线程用的 Arc
+    let state_arc = state.inner().clone();
+    // 重置停止标志
+    state_arc.should_stop.store(false, Ordering::Relaxed);
     
     let total_files = file_paths.len();
     let batch_start = Instant::now();
 
-    // 🟢 1. 在循环外获取后缀名 (避免重复计算)
-    // context.options 就是 StyleOptions 枚举，直接调用我们刚写的方法
+    // 🟢 关键修正点 1：专门克隆一份给后台线程用 (命名为 _thread)
+    // 这样原始的 state_arc 就不会被 move 走，函数最后还能用
+    let state_for_thread = state_arc.clone();
+    let window_for_thread = window.clone();
+
+    // 准备其他共享数据
     let suffix = context.options.filename_suffix(); 
-    // 将 &str 转为 String 以便在 move 闭包中拥有所有权，或者放入 Arc
     let suffix_arc = Arc::new(suffix.to_string());
 
-    // 2. 创建处理器 (策略模式)
-    // 🟢 关键：使用 Arc 包裹 Box，以便在循环的线程中共享引用
     let processor_strategy = processor::create_processor(&context.options);
     let processor_arc = Arc::new(processor_strategy);
 
-    for (index, file_path) in file_paths.iter().enumerate() {
-        // --- A. 检查停止信号 ---
-        if state.should_stop.load(Ordering::Relaxed) {
-            window.emit("process-status", "stopped").map_err(|e| e.to_string())?;
-            return Ok("Stopped by user".to_string());
-        }
+    let completed_count = Arc::new(AtomicUsize::new(0));
 
-        // --- B. EXIF 预检查 ---
-        if !metadata::has_exif(file_path) {
-            // 发送跳过事件
-            window.emit("process-progress", serde_json::json!({
-                "current": index + 1,
-                "total": total_files,
-                "filepath": file_path,
-                "status": "skipped"
-            })).ok(); // 忽略发送失败
-            continue;
-        }
-
-        // --- C. 准备线程所需数据 ---
-        // 🟢 2. 克隆后缀名的引用 (Arc 克隆开销极小)
-        let suffix_ref = suffix_arc.clone();
-
-        let path_clone = file_path.clone();
-        // 克隆 Arc 引用计数，开销极小
-        let processor_ref = processor_arc.clone(); 
-
-        // --- D. 放入线程池执行 (Heavy Lifting) ---
-        let result = tauri::async_runtime::spawn_blocking(move || {
-            // 1. 打开图片
-            let img = image::open(&path_clone).map_err(|e| format!("无法打开图片: {}", e))?;
+    // 放入线程池
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        // 🟢 关键修正点 2：闭包里只使用 _for_thread 版本的变量
+        
+        file_paths.par_iter().for_each(|file_path| {
             
-            // 2. 获取元数据
-            let (make, model, params) = metadata::get_exif_string_tuple(&path_clone);
+            // 使用 state_for_thread
+            if state_for_thread.should_stop.load(Ordering::Relaxed) {
+                return;
+            }
 
-            // 3. 调用多态接口处理图片
-            // processor_ref 会自动根据之前的 create_processor 逻辑调用对应实现
-            let final_image = processor_ref.process(&img, &make, &model, &params)?;
+            // EXIF 预检查
+            if !metadata::has_exif(file_path) {
+                let current = completed_count.fetch_add(1, Ordering::Relaxed) + 1;
+                // 使用 window_for_thread
+                let _ = window_for_thread.emit("process-progress", serde_json::json!({
+                    "current": current,
+                    "total": total_files,
+                    "filepath": file_path,
+                    "status": "skipped"
+                }));
+                return;
+            }
 
-            // 4. 保存图片逻辑
-            let path_obj = Path::new(&path_clone);
+            // ... (中间的处理逻辑保持不变) ...
+            let processor_ref = &processor_arc; 
+            let suffix_ref = &suffix_arc;
+
+            let img = match image::open(file_path) {
+                Ok(i) => i,
+                Err(e) => {
+                    println!("❌ 无法打开: {} -> {}", file_path, e);
+                    return; 
+                }
+            };
+            
+            let (make, model, params) = metadata::get_exif_string_tuple(file_path);
+
+            let final_image = match processor_ref.process(&img, &make, &model, &params) {
+                Ok(img) => img,
+                Err(e) => {
+                    println!("❌ 处理失败: {} -> {}", file_path, e);
+                    return;
+                }
+            };
+
+            let path_obj = Path::new(file_path);
             let parent = path_obj.parent().unwrap_or(Path::new("."));
             let file_stem = path_obj.file_stem().unwrap().to_string_lossy();
             
-            // 这里可以做一个简单的优化：根据不同的 style 生成不同的后缀
-            // 但因为 processor_ref 是 dyn Trait，获取 style 名字比较麻烦，
-            // 简单起见，可以暂时统一后缀，或者在 Trait 里加一个 get_suffix() 方法。
-            // 这里我们简单使用 "_framed.jpg"
             let new_filename = format!("{}_{}.jpg", file_stem, suffix_ref);
             let output_path = parent.join(new_filename);
 
-            final_image.save(&output_path).map_err(|e| format!("保存失败: {}", e))?;
+            if let Err(e) = final_image.save(&output_path) {
+                println!("❌ 保存失败: {}", e);
+                return;
+            }
 
-            Ok::<String, String>(output_path.to_string_lossy().to_string())
-        }).await;
+            // 发送成功进度 (使用 window_for_thread)
+            let current = completed_count.fetch_add(1, Ordering::Relaxed) + 1;
+            
+            let _ = window_for_thread.emit("process-progress", serde_json::json!({
+                "current": current,
+                "total": total_files,
+                "filepath": file_path,
+                "status": "processing"
+            }));
+        });
+    }).await;
 
-        // --- E. 处理结果与 UI 反馈 ---
-        match result {
-            Ok(Ok(saved_path)) => {
-                println!("✅ 完成: {}", saved_path);
-                // 发送成功进度
-                window.emit("process-progress", serde_json::json!({
-                    "current": index + 1,
-                    "total": total_files,
-                    "filepath": file_path,
-                    "status": "processing"
-                })).map_err(|e| e.to_string())?;
-            },
-            Ok(Err(e)) => {
-                println!("❌ 处理错误: {}", e);
-                // 可以选择发送错误事件，或者仅打印日志
-            },
-            Err(e) => println!("❌ 线程崩溃: {}", e),
-        }
+    // 检查线程池结果
+    if let Err(e) = result {
+        println!("❌ 线程池异常: {}", e);
+        return Err(format!("Thread pool error: {}", e));
     }
 
     let duration = batch_start.elapsed();
-    println!("✨ [API V2] 批处理全部完成，耗时: {:.2?}", duration);
     
-    // 发送完成信号
+    // 🟢 关键修正点 3：这里现在可以使用 state_arc 了
+    // 因为移动进闭包的是 state_for_thread，state_arc 依然在当前作用域有效
+    if state_arc.should_stop.load(Ordering::Relaxed) {
+        window.emit("process-status", "stopped").map_err(|e| e.to_string())?;
+        return Ok("Stopped by user".to_string());
+    }
+
+    println!("✨ [API V2] 并行批处理全部完成，耗时: {:.2?}", duration);
     window.emit("process-status", "finished").map_err(|e| e.to_string())?;
 
     Ok(format!("Batch processing complete in {:.2?}", duration))
