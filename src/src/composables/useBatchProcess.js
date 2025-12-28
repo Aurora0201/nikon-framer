@@ -3,14 +3,11 @@ import { ref, computed, onUnmounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { store } from '../store.js';
 
-// 🟢 辅助函数：构建上下文 (极简版)
-// 逻辑：直接获取当前选中的预设 ID，作为 style 发送给后端
-// 因为你已经确保了 PRESET_CONFIGS 里的 id 与后端 Enum Variant 一一对应
+// 🟢 辅助函数：构建上下文
 function buildBatchContext() {
   let targetStyleId = store.activePresetId;
 
-  // 🛡️ 容错处理：如果用户刚打开软件，还没点击任何预设卡片
-  // 我们需要自动获取当前模式下的第一个预设 ID 作为默认值
+  // 1. 容错：如果未选中，尝试获取当前列表第一个
   if (!targetStyleId) {
     const currentPresets = store.currentPresets;
     if (currentPresets && currentPresets.length > 0) {
@@ -18,7 +15,7 @@ function buildBatchContext() {
     }
   }
 
-  // 🛡️ 最终兜底：如果连列表都是空的（极少见），使用你的默认白底 ID
+  // 2. 兜底：如果还是没有，使用默认值
   if (!targetStyleId) {
     console.warn("⚠️ [Batch] 未找到有效的 Style ID，使用默认兜底值");
     return { style: 'BottomWhite' }; 
@@ -26,15 +23,7 @@ function buildBatchContext() {
 
   console.log(`🔧 [Batch] 锁定后端 Style ID: ${targetStyleId}`);
 
-  // 🟢 核心逻辑：
-  // 根据目前的协议，我们只发送 style ID。
-  // 虽然 Store 里有 shadowIntensity 等参数，但既然我们要遵守“后端接管审美”，
-  // 这里暂时不发送这些参数，除非你的后端接口明确要求接收它们。
-  
-  // 如果是 GaussianBlur，且后端接口定义为 { style: 'GaussianBlur', shadowIntensity: f32 }
-  // 你需要解开下面的注释并做判断。
-  // 但根据你的指示“后端通过唯一的参数 style 来确定”，我们保持最简：
-  
+  // 根据后端协议，直接发送 style 字段即可
   return { 
     style: targetStyleId 
   };
@@ -57,7 +46,9 @@ export function useBatchProcess() {
   });
 
   const handleBatchClick = async () => {
-    // === 场景 A: 停止 ===
+    // =================================================
+    // 🛑 场景 A: 停止任务
+    // =================================================
     if (store.isProcessing) {
       if (canStop.value) {
         store.setStatus("正在终止任务...", "loading");
@@ -65,45 +56,84 @@ export function useBatchProcess() {
           await invoke('stop_batch_process');
         } catch (err) {
           console.error("终止失败:", err);
+          store.setStatus("终止失败", "error");
         }
       }
       return;
     }
 
-    // === 场景 B: 启动 ===
+    // =================================================
+    // ▶️ 场景 B: 启动任务
+    // =================================================
     if (store.fileQueue.length === 0) {
       store.setStatus("列表为空，请先添加照片！", "error");
       return;
     }
 
-    // 1. 获取文件路径
-    const filePaths = store.fileQueue.map(f => f.path);
-
-    // 🟢 2. 动态构建 Context
+    // 1. 准备数据
+    const allPaths = store.fileQueue.map(f => f.path);
     const contextPayload = buildBatchContext();
-    
-    console.log("📦 [Batch] 最终发送 Payload:", JSON.stringify(contextPayload, null, 2));
 
-    // 更新状态
+    // 2. 🟢 智能过滤：调用 Rust 检查哪些文件还没生成过
+    store.setStatus("正在检查重复文件...", "loading");
+    let filesToProcess = [];
+    let skippedCount = 0;
+
+    try {
+      // 调用我们在 main.rs 新增的 filter_unprocessed_files 命令
+      filesToProcess = await invoke('filter_unprocessed_files', { 
+        paths: allPaths, 
+        // 传递字符串 ID (如 "BottomWhite")，Rust 端会自动拼接后缀检查
+        style: contextPayload.style 
+      });
+      
+      skippedCount = allPaths.length - filesToProcess.length;
+    } catch (e) {
+      console.error("过滤检查失败，将全部处理:", e);
+      // 降级处理：如果检查失败，就全部重新跑一遍，保证功能可用
+      filesToProcess = allPaths;
+    }
+
+    // 3. 检查过滤结果
+    // Case 1: 所有文件都已存在
+    if (filesToProcess.length === 0) {
+      store.setStatus(`所有文件均已生成过 (${skippedCount} 张)，无需处理！`, "success");
+      // 可以在这里稍微闪烁一下进度条表示完成，或者直接退出
+      store.updateProgress(skippedCount, skippedCount);
+      return; 
+    }
+    
+    // Case 2: 有部分或全部需要处理
+    if (skippedCount > 0) {
+      console.log(`[Batch] 自动跳过 ${skippedCount} 张已存在文件`);
+    }
+
+    // 4. 更新 UI 状态
     store.isProcessing = true;
     canStop.value = false;
-    store.setStatus("准备开始批处理...", "loading");
+    store.setStatus(
+      skippedCount > 0 
+        ? `开始处理 (已跳过 ${skippedCount} 张重复)...` 
+        : "准备开始批处理...", 
+      "loading"
+    );
     
-    // 重置进度
+    // 5. 重置进度 (Total 设为实际需要处理的数量)
     store.progress.percent = 0;
     store.progress.current = 0;
-    store.progress.total = filePaths.length;
+    store.progress.total = filesToProcess.length;
 
-    // 启动计时器 (3秒后允许终止)
+    // 6. 启动“停止按钮”计时器 (3秒后允许终止)
     if (stopTimer) clearTimeout(stopTimer);
     stopTimer = setTimeout(() => {
+      // 只有还在处理中才显示停止按钮
       if (store.isProcessing) canStop.value = true;
     }, 3000);
 
-    // 调用后端
+    // 7. 正式调用后端批处理
     try {
       await invoke('start_batch_process_v2', {
-        filePaths: filePaths,
+        filePaths: filesToProcess, // 👈 关键：只传过滤后的列表
         context: contextPayload
       });
     } catch (error) {
@@ -113,7 +143,7 @@ export function useBatchProcess() {
     }
   };
 
-  // UI 计算属性
+  // --- UI 计算属性 ---
   const buttonText = computed(() => {
     if (!store.isProcessing) return '开始批处理 (Start Batch)';
     if (!canStop.value) return '启动中... (Starting)';
