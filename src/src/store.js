@@ -26,15 +26,15 @@ const PRESET_CONFIGS = {
   // === 透明模式 ===
   Transparent: [
     {
-      id: 'GaussianBlur', // 👈 后端收到 { style: "trans_std" }
+      id: 'TransparentMaster', // 👈 后端收到 { style: "trans_std" }
       name: 'Glass / Blur',
       desc: '大师风格 / 背景模糊',
       img: 'transparent_standard.jpg',
       params: { shadowIntensity: 60, blurRadius: 20 }
     },
     {
-      id: 'Master', // 👈 后端收到 { style: "trans_std" }
-      name: 'Glass / Blur',
+      id: 'TransparentClassic', // 👈 后端收到 { style: "trans_std" }
+      name: 'Classic / Blur',
       desc: '经典效果 / 背景模糊',
       img: 'transparent_classic.jpg',
       params: { shadowIntensity: 60, blurRadius: 20 }
