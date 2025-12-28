@@ -25,6 +25,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             // 批处理
             commands::batch::start_batch_process_v2,
+            //
+            commands::common::check_output_exists,
             // 通用命令
             commands::common::stop_batch_process,
             commands::common::check_file_exif,

@@ -38,10 +38,10 @@ pub enum StyleOptions {
 impl StyleOptions {
     pub fn filename_suffix(&self) -> &'static str {
         match self {
-            Self::BottomWhite => "_BottomWhite",      // 对应生成 xxx_White.jpg
-            Self::TransparentClassic => "_TransparentClassic", // 对应生成 xxx_Blur.jpg
-            Self::TransparentMaster => "_TransparentMaster",// 对应生成 xxx_Master.jpg
-            Self::PolaroidWhite => "_PolaroidWhite"
+            Self::BottomWhite => "BottomWhite",      // 对应生成 xxx_White.jpg
+            Self::TransparentClassic => "TransparentClassic", // 对应生成 xxx_Blur.jpg
+            Self::TransparentMaster => "TransparentMaster",// 对应生成 xxx_Master.jpg
+            Self::PolaroidWhite => "PolaroidWhite"
             // 以后新增样式，只需要在这里加一行
         }
     }
