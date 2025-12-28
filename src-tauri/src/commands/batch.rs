@@ -21,6 +21,12 @@ pub async fn start_batch_process_v2(
     let total_files = file_paths.len();
     let batch_start = Instant::now();
 
+    // 🟢 1. 在循环外获取后缀名 (避免重复计算)
+    // context.options 就是 StyleOptions 枚举，直接调用我们刚写的方法
+    let suffix = context.options.filename_suffix(); 
+    // 将 &str 转为 String 以便在 move 闭包中拥有所有权，或者放入 Arc
+    let suffix_arc = Arc::new(suffix.to_string());
+
     // 2. 创建处理器 (策略模式)
     // 🟢 关键：使用 Arc 包裹 Box，以便在循环的线程中共享引用
     let processor_strategy = processor::create_processor(&context.options);
@@ -46,6 +52,9 @@ pub async fn start_batch_process_v2(
         }
 
         // --- C. 准备线程所需数据 ---
+        // 🟢 2. 克隆后缀名的引用 (Arc 克隆开销极小)
+        let suffix_ref = suffix_arc.clone();
+
         let path_clone = file_path.clone();
         // 克隆 Arc 引用计数，开销极小
         let processor_ref = processor_arc.clone(); 
@@ -71,7 +80,7 @@ pub async fn start_batch_process_v2(
             // 但因为 processor_ref 是 dyn Trait，获取 style 名字比较麻烦，
             // 简单起见，可以暂时统一后缀，或者在 Trait 里加一个 get_suffix() 方法。
             // 这里我们简单使用 "_framed.jpg"
-            let new_filename = format!("{}_framed.jpg", file_stem);
+            let new_filename = format!("{}_{}.jpg", file_stem, suffix_ref);
             let output_path = parent.join(new_filename);
 
             final_image.save(&output_path).map_err(|e| format!("保存失败: {}", e))?;

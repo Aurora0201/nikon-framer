@@ -123,7 +123,6 @@ impl FrameProcessor for BottomWhiteProcessor {
 // ==========================================
 pub struct TransparentClassicProcessor {
     pub font_data: Arc<Vec<u8>>,
-    pub shadow: f32,
 }
 
 impl FrameProcessor for TransparentClassicProcessor {
@@ -153,9 +152,9 @@ impl FrameProcessor for TransparentClassicProcessor {
         } else {
             BlurStyleResources { main_logo: None, sub_logo: None }
         };
-        
+        let default_shadow = 150.0;
         // 🟢 2. 调用 blur::process
-        Ok(blur::process(img, make, model, params, &font, "Bold", self.shadow, &assets))
+        Ok(blur::process(img, make, model, params, &font, "Bold", default_shadow, &assets))
     }
 }
 
@@ -217,10 +216,9 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
         },
 
         // 高斯模糊模式
-        StyleOptions::TransparentClassic { shadow_intensity } => {
+        StyleOptions::TransparentClassic => {
             Box::new(TransparentClassicProcessor { 
                 font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold),
-                shadow: *shadow_intensity 
             })
         },
 

@@ -20,15 +20,25 @@ pub enum StyleOptions {
 
     // 变体 2：高斯模糊 (关心字体 + 阴影)
     #[serde(rename_all = "camelCase")] // 🟢 必须加在这里！
-    TransparentClassic {
-        shadow_intensity: f32, // 只有这个模式有阴影参数
-    },
+    TransparentClassic,
 
     // 🟢 [新增] 大师模式
     // 参数几乎和 GaussianBlur 一样，因为它们都是模糊背景
     #[serde(rename_all = "camelCase")]
     TransparentMaster,
 
+}
+
+// 🟢 新增：为枚举实现方法
+impl StyleOptions {
+    pub fn filename_suffix(&self) -> &'static str {
+        match self {
+            Self::BottomWhite => "_White",      // 对应生成 xxx_White.jpg
+            Self::TransparentClassic => "_Blur", // 对应生成 xxx_Blur.jpg
+            Self::TransparentMaster => "_Master",// 对应生成 xxx_Master.jpg
+            // 以后新增样式，只需要在这里加一行
+        }
+    }
 }
 
 // 总配置
