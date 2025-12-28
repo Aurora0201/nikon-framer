@@ -19,14 +19,14 @@ pub enum StyleOptions {
 
     // 变体 2：高斯模糊 (关心字体 + 阴影)
     #[serde(rename_all = "camelCase")] // 🟢 必须加在这里！
-    GaussianBlur {
+    TransparentClassic {
         shadow_intensity: f32, // 只有这个模式有阴影参数
     },
 
     // 🟢 [新增] 大师模式
     // 参数几乎和 GaussianBlur 一样，因为它们都是模糊背景
     #[serde(rename_all = "camelCase")]
-    Master,
+    TransparentMaster,
 
 }
 
