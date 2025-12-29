@@ -1,196 +1,207 @@
-import { reactive } from 'vue';
+import { reactive, computed } from 'vue';
+// Tauri v2 使用 @tauri-apps/api/core，如果是 v1 请改为 @tauri-apps/api/tauri
+import { convertFileSrc } from '@tauri-apps/api/core';
 
-// 🟢 定义所有可用的边框模式
-// 这里的 value 必须严格对应后端 Rust Enum 的 Variant 名称
-// 这里的 value 也必须对应 PRESET_CONFIGS 的 key
-const MODE_OPTIONS = [
-  { value: 'ClassicWhite', label: '经典白底 (ClassicWhite)' },
-  { value: 'Transparent', label: '透明相框 (Transparent)' },
-  // 未来扩展非常容易：
-  // { value: 'Master', label: '大师水印 (Master)' },
-];
-// 🟢 将配置数据提取到 Store 外部或内部均可，这里为了整洁放在 Store 定义中
-// 🟢 关键：这里的 id 就是发给后端的 style 参数
+// 🟢 预设配置 (建议放在 src/assets/presets/ 下，这里为了演示路径写文件名)
+// 注意：前端显示的图片 ID 必须与 Rust 枚举后缀逻辑对应
 const PRESET_CONFIGS = {
-  // === 白底模式 ===
   ClassicWhite: [
-    {
-      id: 'BottomWhite', // 👈 后端收到 { style: "white_std" }
-      name: 'Standard White',
-      desc: '标准白底 / 简约风格',
-      img: 'white_standard.jpg',
-      
-    },
-
-    {
-      id: 'PolaroidWhite', // 👈 后端收到 { style: "white_std" }
-      name: 'Polaroid White',
-      desc: '宝丽来风格',
-      img: 'polaroid_white.jpg',
-      
-    },
+    { id: 'BottomWhite', name: 'Standard White', desc: '标准白底 / 简约风格', img: 'white_standard.jpg' },
+    { id: 'PolaroidWhite', name: 'Polaroid White', desc: '宝丽来风格', img: 'polaroid_white.jpg' },
   ],
-  
-  // === 透明模式 ===
   Transparent: [
-    {
-      id: 'TransparentMaster', // 👈 后端收到 { style: "trans_std" }
-      name: 'Glass / Blur',
-      desc: '大师风格 / 背景模糊',
-      img: 'transparent_standard.jpg',
-      
-    },
-
-    {
-      id: 'TransparentClassic', // 👈 后端收到 { style: "trans_std" }
-      name: 'Classic / Blur',
-      desc: '经典效果 / 背景模糊',
-      img: 'transparent_classic.jpg',
-      
-    },
+    { id: 'TransparentMaster', name: 'Glass Blur', desc: '大师风格 / 模糊', img: 'transparent_standard.jpg' },
+    { id: 'TransparentClassic', name: 'Classic Blur', desc: '经典效果 / 模糊', img: 'transparent_classic.jpg' },
   ],
 };
 
+const MODE_OPTIONS = [
+  { value: 'ClassicWhite', label: '经典白底 (ClassicWhite)' },
+  { value: 'Transparent', label: '透明相框 (Transparent)' },
+];
+
+
+// 🟢 [核心修复] 使用 Glob 导入
+// 1. eager: true 表示直接加载路径字符串，而不是返回 Promise
+// 2. import: 'default' 确保直接拿到图片 URL
+// 3. 注意：这里的路径 './assets/presets/*' 必须是相对于 store.js 的准确路径！
+const presetAssets = import.meta.glob('./assets/presets/*.{png,jpg,jpeg,svg}', { 
+  eager: true, 
+  import: 'default' 
+});
+
+// 🟢 [核心修复] 查表获取路径
+const getPresetUrl = (filename) => {
+  // 构造 Key，必须和上面 glob 里的路径匹配
+  // 如果 store.js 在 src/，assets 在 src/assets，则 key 应该是 ./assets/presets/xxx.jpg
+  const key = `./assets/presets/${filename}`;
+  
+  const foundUrl = presetAssets[key];
+  
+  if (!foundUrl) {
+    console.warn(`⚠️ [资源丢失] 找不到预设图: ${key}`);
+    // 打印一下所有可用的 key，方便调试
+    // console.log("可用列表:", Object.keys(presetAssets));
+    return '';
+  }
+  
+  return foundUrl;
+};
 
 export const store = reactive({
-  // ... 状态数据保持不变 ...
+  // --- 核心状态 ---
   fileQueue: [],
-  activeFilePath: null, 
-  activePresetId: null,
+  activeFilePath: null,
+  activePresetId: 'BottomWhite', // 默认选中 ID
+  
+  // 🟢 [新增] 结果映射表：Key=原图路径, Value=处理后的路径
+  processedFiles: new Map(),
+
   isProcessing: false,
   isDragging: false,
   progress: { current: 0, total: 0, percent: 0 },
   statusText: "准备就绪",
   statusType: "normal",
-  // 🟢 建议：初始化时就给一个默认选中的 ID，这样打开软件时就不会是空的
-  activePresetId: 'BottomWhite',
+  
   settings: {
-    style: 'ClassicWhite',
+    style: 'ClassicWhite', // 当前大类
     shadowIntensity: 40,
     paddingRatio: 10,
   },
 
-// 🟢 [新增] 暴露模式选项列表给 UI 组件使用
-  get modeOptions() {
-    return MODE_OPTIONS;
+  // --- Getters (计算属性) ---
+
+  get modeOptions() { return MODE_OPTIONS; },
+
+  get currentPresets() { return PRESET_CONFIGS[this.settings.style] || []; },
+
+  // 🟢 [核心修改] 智能计算当前预览图 URL
+  get previewSource() {
+    // 1. 先找到当前选中的预设配置 (为了拿 img 文件名)
+    const allPresets = [...PRESET_CONFIGS.ClassicWhite, ...PRESET_CONFIGS.Transparent];
+    const currentConfig = allPresets.find(p => p.id === this.activePresetId);
+    
+    // 准备默认的预设预览对象 (兜底)
+    const presetPreview = {
+      type: 'preset',
+      url: currentConfig ? getPresetUrl(currentConfig.img) : null,
+      text: '效果预览'
+    };
+
+    // 2. 如果没有选文件，直接显示预设
+    if (!this.activeFilePath) {
+      return presetPreview;
+    }
+
+    // ---------------------------------------------------------
+    // 🔴 你的报错是因为缺少了下面这一行定义！
+    // 必须先从 Map 中获取数据，赋值给 resultData 变量
+    // ---------------------------------------------------------
+    const resultData = this.processedFiles.get(this.activeFilePath);
+
+    // 3. 检查是否有结果
+    if (resultData) {
+      // ✅ 情况 A: 有结果 -> 显示真实结果 (Base64)
+      return {
+        type: 'result',
+        // resultData 现在是 "data:image/jpeg;base64,..."，直接用
+        url: resultData, 
+        text: '已生成'
+      };
+    } else {
+      // ❌ 情况 B: 没结果 -> 显示预设图
+      return presetPreview;
+    }
   },
 
-  // 🟢 [新增] 切换模式专用动作
-  // 作用：修改模式 -> 获取新列表 -> 自动选中第一个
+  // --- Actions ---
+
+  // 切换大类模式
   setMode(newMode) {
-    console.log(`[Store] 切换模式到: ${newMode}`);
-    
-    // 1. 修改模式
     this.settings.style = newMode;
-    
-    // 2. 获取新模式下的预设列表
-    // 注意：这里利用了 getter 自动获取对应列表
+    // 切换模式后，自动选中该模式下的第一个预设
     const presets = this.currentPresets;
-    
-    // 3. 自动选中第一个 (如果有的话)
-    if (presets && presets.length > 0) {
+    if (presets.length > 0) {
       this.applyPreset(presets[0]);
     } else {
-      // 如果新模式下没有预设，重置选中状态
       this.activePresetId = null;
     }
   },
-  // 🟢 获取当前模式下的预设列表
-  get currentPresets() {
-    return PRESET_CONFIGS[this.settings.style] || [];
-  },
 
-  // 应用预设
+  // 切换具体预设
   applyPreset(preset) {
-    console.log(`Store 应用预设: ${preset.name}`);
-    this.activePresetId = preset.id;
-    if (preset.params) {
-      Object.assign(this.settings, preset.params);
+    if (this.activePresetId !== preset.id) {
+        this.activePresetId = preset.id;
+        // 🟢 切换预设意味着之前的预览结果(如果有)不再适用当前效果
+        // 我们不在这里强制删除，而是依赖 WorkspacePanel 的 Watcher 去问 Rust
+        // 如果 Rust 说新模式下没文件，Watcher 会调用 clearProcessedStatus，界面就会自动变回预设图
     }
   },
-  
-  // 🟢 [新增] 动态获取当前模式下的预设列表
-  // 使用 Getter 语法，像计算属性一样自动更新
-  get currentPresets() {
-    return PRESET_CONFIGS[this.settings.style] || [];
+
+  // 🟢 [新增] 标记某张图已处理 (Rust 生成成功后调用)
+  markFileProcessed(originalPath, outputPath) {
+    this.processedFiles.set(originalPath, outputPath);
   },
 
-
-  // --- 动作 (Actions) ---
-  
-  // 🟢 [新增] 应用预设 (核心业务逻辑)
-  applyPreset(preset) {
-    console.log(`Store 应用预设: ${preset.name}`);
-    
-    // 1. 设置选中状态
-    this.activePresetId = preset.id;
-    
-    // 2. 将预设参数覆盖到全局设置 (UI 滑块会跟着动)
-    if (preset.params) {
-      Object.assign(this.settings, preset.params);
+  // 🟢 [新增] 清除某张图的处理状态 (Watcher 发现文件不存在时调用)
+  clearProcessedStatus(originalPath) {
+    if (this.processedFiles.has(originalPath)) {
+      this.processedFiles.delete(originalPath);
     }
   },
-  // --- 动作 (Actions) ---
-  
-  // 🟢 1. 智能添加文件
+
+  // --- 文件列表操作 (保持原有逻辑) ---
   addFiles(newFiles) {
     const existingPaths = new Set(this.fileQueue.map(f => f.path));
-    
-    // 过滤去重
     const uniqueFiles = newFiles.filter(f => !existingPaths.has(f.path));
     
-    // 统一格式化 (Store 负责初始化数据状态)
     const formattedFiles = uniqueFiles.map(f => ({
       name: f.name,
       path: f.path,
-      exifStatus: 'wait' // 统一在这里定义初始状态
+      exifStatus: 'wait'
     }));
     
     this.fileQueue.push(...formattedFiles);
 
-    // 自动选中逻辑：如果当前没有选中文件，且添加了新文件，默认选中第一个
     if (!this.activeFilePath && this.fileQueue.length > 0) {
       this.activeFilePath = this.fileQueue[0].path;
     }
-
     return uniqueFiles.length; 
   },
 
-  // 🟢 2. 智能移除文件
   removeFile(index) {
-    // 先判断要删除的是不是当前选中的文件
     const fileToRemove = this.fileQueue[index];
     const isRemovingActive = fileToRemove && fileToRemove.path === this.activeFilePath;
+    
+    // 移除文件时，也要清理掉它的缓存状态
+    if (fileToRemove) {
+      this.processedFiles.delete(fileToRemove.path);
+    }
 
-    // 删除
     this.fileQueue.splice(index, 1);
 
-    // 如果删除了当前选中的，自动修补选中状态
     if (isRemovingActive) {
-      // 如果列表还有文件，选中列表头；否则置空
       this.activeFilePath = this.fileQueue.length > 0 ? this.fileQueue[0].path : null;
     }
   },
 
-  // 设置当前激活的文件
   setActiveFile(path) {
     this.activeFilePath = path;
   },
 
-  // 🟢 3. 彻底清空
   clearQueue() {
     this.fileQueue = [];
-    this.activeFilePath = null; // 数据层负责重置选中
+    this.processedFiles.clear(); // 清空所有缓存
+    this.activeFilePath = null;
     this.progress = { current: 0, total: 0, percent: 0 };
     this.statusText = "列表已清空";
-    this.statusType = "normal";
   },
 
-  // ... setStatus, updateProgress 保持不变 ...
   setStatus(text, type = "normal") {
     this.statusText = text;
     this.statusType = type;
   },
+
   updateProgress(current, total) {
     this.progress.current = current;
     this.progress.total = total;
