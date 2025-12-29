@@ -10,7 +10,8 @@ use ab_glyph::FontRef;
 
 use crate::models::StyleOptions;
 use crate::processor::traits::FrameProcessor; 
-
+// 🟢 引入 parser 的数据结构
+use crate::parser::models::ParsedImageContext;
 // 引入资源模块
 use crate::resources::{self, Brand, FontFamily, FontWeight, LogoType};
 // 引入各个子模块的特定资源结构体
@@ -89,33 +90,50 @@ struct BottomWhiteProcessor {
 }
 
 impl FrameProcessor for BottomWhiteProcessor {
-    fn process(&self, img: &DynamicImage, make: &str, model: &str, params: &str) -> Result<DynamicImage, String> {
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
         let font = FontRef::try_from_slice(&self.font_data)
             .map_err(|_| "白底模式: 标准字体解析失败")?;
         
-        let brand = parse_brand(make);
-        
-        let assets = if let Some(b) = brand {
-            match b {
-                Brand::Nikon => WhiteStyleResources {
-                    main_logo:  resources::get_logo(b, LogoType::Wordmark),
-                    sub_logo:   resources::get_logo(b, LogoType::SymbolZ),       
-                    badge_icon: resources::get_logo(b, LogoType::IconYellowBox), 
-                },
-                _ => WhiteStyleResources {
-                    main_logo: resources::get_logo(b, LogoType::Wordmark),
-                    sub_logo: None,
-                    badge_icon: None,
-                }
+        // 1. 获取资源：根据 Parser 解析出的 Brand 获取 Logo
+        // 白底模式逻辑：Nikon 用 Wordmark + Z标(如果有)；其他品牌用 Wordmark
+        let assets = match ctx.brand {
+            Brand::Nikon => WhiteStyleResources {
+                main_logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
+                // 这里的判断逻辑属于“排版策略”，Parser 只告诉我们需要什么，这里决定怎么用
+                sub_logo: if ctx.model_name.contains("Z") { 
+                    resources::get_logo(ctx.brand, LogoType::SymbolZ) 
+                } else { None },
+                badge_icon: resources::get_logo(ctx.brand, LogoType::IconYellowBox), 
+            },
+            Brand::Sony => WhiteStyleResources {
+                main_logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
+                sub_logo: resources::get_logo(ctx.brand, LogoType::SymbolAlpha), // Sony 加个 Alpha 标
+                badge_icon: None,
+            },
+            _ => WhiteStyleResources {
+                main_logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
+                sub_logo: None,
+                badge_icon: None,
             }
-        } else {
-            WhiteStyleResources { main_logo: None, sub_logo: None, badge_icon: None }
         };
 
-        Ok(white::process(img, make, model, params, &font, "Bold", &assets))
+        // 2. 格式化参数
+        let params_str = ctx.params.format_standard();
+
+        // 3. 调用旧的绘图函数 (桥接模式)
+        // 注意：我们传的是 ctx.model_name (已经清洗过是 "Z 8" 而不是 "NIKON Z 8")
+        // 以及 ctx.brand.to_string() (因为我们实现了 Display 特征)
+        Ok(white::process(
+            img, 
+            &ctx.brand.to_string(), 
+            &ctx.model_name, 
+            &params_str, 
+            &font, 
+            "Bold", 
+            &assets
+        ))
     }
 }
-
 // ==========================================
 // 策略 2: 模糊处理器 (Blur)
 // ==========================================
@@ -124,36 +142,43 @@ pub struct TransparentClassicProcessor {
 }
 
 impl FrameProcessor for TransparentClassicProcessor {
-    fn process(&self, img: &DynamicImage, make: &str, model: &str, params: &str) -> Result<DynamicImage, String> {
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
         let font = FontRef::try_from_slice(&self.font_data)
             .map_err(|_| "模糊模式: 标准字体解析失败")?;
             
-        let brand = parse_brand(make);
-        
-        let assets = if let Some(b) = brand {
-            match b {
-                Brand::Nikon => BlurStyleResources {
-                    main_logo: resources::get_logo(b, LogoType::Wordmark),
-                    sub_logo:  resources::get_logo(b, LogoType::SymbolZ),
-                },
-                Brand::Sony => BlurStyleResources {
-                    main_logo: resources::get_logo(b, LogoType::Wordmark),
-                    sub_logo:  resources::get_logo(b, LogoType::SymbolAlpha),
-                },
-                _ => BlurStyleResources {
-                    main_logo: resources::get_logo(b, LogoType::Wordmark),
-                    sub_logo: None,
-                }
+        // 资源获取逻辑
+        let assets = match ctx.brand {
+            Brand::Nikon => BlurStyleResources {
+                main_logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
+                sub_logo: if ctx.model_name.contains("Z") {
+                    resources::get_logo(ctx.brand, LogoType::SymbolZ)
+                } else { None },
+            },
+            Brand::Sony => BlurStyleResources {
+                main_logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
+                sub_logo: resources::get_logo(ctx.brand, LogoType::SymbolAlpha),
+            },
+            _ => BlurStyleResources {
+                main_logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
+                sub_logo: None,
             }
-        } else {
-            BlurStyleResources { main_logo: None, sub_logo: None }
         };
+        
+        let params_str = ctx.params.format_standard();
         let default_shadow = 150.0;
         
-        Ok(blur::process(img, make, model, params, &font, "Bold", default_shadow, &assets))
+        Ok(blur::process(
+            img, 
+            &ctx.brand.to_string(), 
+            &ctx.model_name, 
+            &params_str, 
+            &font, 
+            "Bold", 
+            default_shadow, 
+            &assets
+        ))
     }
 }
-
 // ==========================================
 // 策略 3: 大师处理器 (Master)
 // ==========================================
@@ -164,32 +189,20 @@ pub struct TransparentMasterProcessor {
 }
 
 impl FrameProcessor for TransparentMasterProcessor {
-    fn process(&self, img: &DynamicImage, _make: &str, _model: &str, params: &str) -> Result<DynamicImage, String> {
-        
-        let main = FontRef::try_from_slice(&self.main_font)
-            .map_err(|_| "Master模式: 主字体解析失败".to_string())?;
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
+        let main = FontRef::try_from_slice(&self.main_font).unwrap();
+        let script = FontRef::try_from_slice(&self.script_font).unwrap();
+        let serif = FontRef::try_from_slice(&self.serif_font).unwrap();
 
-        let script = FontRef::try_from_slice(&self.script_font)
-            .unwrap_or_else(|_| {
-                println!("⚠️ Master模式: 手写体解析失败，回退");
-                main.clone()
-            });
+        let params_str = ctx.params.format_standard();
 
-        let serif = FontRef::try_from_slice(&self.serif_font)
-            .unwrap_or_else(|_| {
-                println!("⚠️ Master模式: 标题字体解析失败，回退");
-                main.clone()
-            });
-
-        let result_img = master::process(
+        Ok(master::process(
             img, 
-            params, 
-            &main,   
+            &params_str, 
+            &main, 
             &script, 
-            &serif   
-        );
-
-        Ok(result_img)
+            &serif
+        ))
     }
 }
 
@@ -202,31 +215,21 @@ pub struct PolaroidProcessor {
 }
 
 impl FrameProcessor for PolaroidProcessor {
-    fn process(&self, img: &DynamicImage, make: &str, model: &str, params: &str) -> Result<DynamicImage, String> {
-        // 解析字体
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
         let font = FontRef::try_from_slice(&self.font_data)
             .map_err(|_| "Polaroid模式: 字体解析失败")?;
 
-        // 1. 解析品牌
-        let brand = parse_brand(make);
-
-        // 2. 准备 PolaroidResources (适配器模式)
-        // Polaroid 模式只需要一个 Logo，通常是 Wordmark (黑色字体)
-        let assets = if let Some(b) = brand {
-            PolaroidResources {
-                logo: resources::get_logo(b, LogoType::Wordmark),
-            }
-        } else {
-            PolaroidResources { logo: None }
+        let assets = PolaroidResources {
+            logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
         };
         
-        // 3. 调用 polaroid::process_polaroid_style
-        // 注意：这里使用 "Regular" 因为你要求的是 Regular 字体
+        let params_str = ctx.params.format_standard();
+
         Ok(polaroid::process_polaroid_style(
             img, 
-            make, 
-            model, 
-            params, 
+            &ctx.brand.to_string(), 
+            &ctx.model_name, 
+            &params_str, 
             &font, 
             "Regular", 
             &assets
