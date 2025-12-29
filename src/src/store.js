@@ -20,30 +20,32 @@ const MODE_OPTIONS = [
   { value: 'Transparent', label: '透明相框 (Transparent)' },
 ];
 
-// 🟢 调试版：图片路径解析器
+
+// 🟢 [核心修复] 使用 Glob 导入
+// 1. eager: true 表示直接加载路径字符串，而不是返回 Promise
+// 2. import: 'default' 确保直接拿到图片 URL
+// 3. 注意：这里的路径 './assets/presets/*' 必须是相对于 store.js 的准确路径！
+const presetAssets = import.meta.glob('./assets/presets/*.{png,jpg,jpeg,svg}', { 
+  eager: true, 
+  import: 'default' 
+});
+
+// 🟢 [核心修复] 查表获取路径
 const getPresetUrl = (filename) => {
-  try {
-    // 1. 打印当前 store.js 所在位置
-    // console.log(`[Debug] store.js 位置: ${import.meta.url}`);
-    
-    // 2. 关键点：相对路径
-    // 如果 store.js 在 src/ 目录下，而 assets 在 src/assets/ 目录下
-    // 这里的路径应该是 './assets/presets/' (同级目录下的 assets)
-    // 如果你的 store.js 在 src/store/ 目录下，才需要用 '../assets/'
-    // 请根据你的实际目录结构修改这里的 './' 或 '../'
-    const relativePath = `./assets/presets/${filename}`; 
-    
-    // 3. 构建 URL
-    const url = new URL(relativePath, import.meta.url).href;
-    
-    // 4. 打印最终结果，按 F12 看看这个 url 对不对
-    // console.log(`[Debug] 图片解析: ${filename} -> ${url}`);
-    
-    return url;
-  } catch (e) {
-    console.error(`[Error] 解析预设图片失败: ${filename}`, e);
-    return ''; // 返回空字符串防止崩溃
+  // 构造 Key，必须和上面 glob 里的路径匹配
+  // 如果 store.js 在 src/，assets 在 src/assets，则 key 应该是 ./assets/presets/xxx.jpg
+  const key = `./assets/presets/${filename}`;
+  
+  const foundUrl = presetAssets[key];
+  
+  if (!foundUrl) {
+    console.warn(`⚠️ [资源丢失] 找不到预设图: ${key}`);
+    // 打印一下所有可用的 key，方便调试
+    // console.log("可用列表:", Object.keys(presetAssets));
+    return '';
   }
+  
+  return foundUrl;
 };
 
 export const store = reactive({
