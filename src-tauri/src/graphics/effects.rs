@@ -4,6 +4,7 @@ use imageproc::rect::Rect;
 use super::shapes::draw_rounded_rect_mut;
 
 // 🟢 柔光阴影生成器
+#[allow(dead_code)]
 pub fn create_diffuse_shadow(target_w: u32, target_h: u32, border_size: u32, intensity: f32) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
     let work_width = 150u32;
     let scale_factor = target_w as f32 / work_width as f32;

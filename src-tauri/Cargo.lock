@@ -2532,6 +2532,8 @@ dependencies = [
  "image",
  "imageproc",
  "kamadak-exif",
+ "once_cell",
+ "rayon",
  "rexif",
  "serde",
  "serde_json",
