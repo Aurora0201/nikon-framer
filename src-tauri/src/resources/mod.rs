@@ -1,5 +1,5 @@
 pub mod fonts;
-pub mod brand_logos;
+pub mod brand;
  
-pub use brand_logos::*;
+pub use brand::*;
 pub use fonts::*;

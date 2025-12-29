@@ -62,26 +62,6 @@ pub fn clean_model_name(make: &str, model: &str) -> String {
     no_make
 }
 
-// 辅助函数：解析品牌字符串为枚举
-fn parse_brand(make: &str) -> Option<Brand> {
-    let m = make.to_lowercase();
-    if m.contains("nikon") {
-        Some(Brand::Nikon)
-    } else if m.contains("sony") {
-        Some(Brand::Sony)
-    } else if m.contains("canon") {
-        Some(Brand::Canon)
-    } else if m.contains("fujifilm") || m.contains("fuji") {
-        Some(Brand::Fujifilm)
-    } else if m.contains("leica") {
-        Some(Brand::Leica)
-    } else if m.contains("hasselblad") {
-        Some(Brand::Hasselblad)
-    } else {
-        None
-    }
-}
-
 // ==========================================
 // 策略 1: 白底处理器 (BottomWhite)
 // ==========================================

@@ -1,51 +1,103 @@
 use std::fs;
 use std::io::BufReader;
+use std::fs::File;
+use exif::{In, Reader, Tag, Value};
+use crate::parser::models::RawExifData; // 引入我们定义的数据结构
 
 
-
-// 🟢 修改返回值：(Make, Model, Params)
-pub fn get_exif_string_tuple(path: &str) -> (String, String, String) {
-    let default = ("".to_string(), "".to_string(), "".to_string());
-    
-    let file = match fs::File::open(path) {
+/// 读取文件 EXIF 并填充 RawExifData
+pub fn get_exif_data(path: &str) -> RawExifData {
+    // 1. 尝试打开文件
+    let file = match File::open(path) {
         Ok(f) => f,
-        Err(_) => return default,
-    };
-    let mut bufreader = BufReader::new(&file);
-    let exifreader = exif::Reader::new();
-    let exif_data = match exifreader.read_from_container(&mut bufreader) {
-        Ok(d) => d,
-        Err(_) => return default,
+        Err(_) => return RawExifData::default(),
     };
 
-    let get = |tag| match exif_data.get_field(tag, exif::In::PRIMARY) {
-        Some(f) => f.display_value().with_unit(&exif_data).to_string().replace("\"", "").trim().to_string(),
-        None => "".to_string(),
+    // 2. 读取 EXIF
+    let mut reader = BufReader::new(file);
+    let exif = match Reader::new().read_from_container(&mut reader) {
+        Ok(e) => e,
+        Err(_) => return RawExifData::default(),
     };
 
-    // 1. 厂商 (用于匹配 Logo)
-    let make = get(exif::Tag::Make);
+    // --- 辅助闭包：获取字符串值 ---
+    let get_text = |tag| {
+        exif.get_field(tag, In::PRIMARY)
+            .map(|f| f.display_value().with_unit(&exif).to_string())
+            .unwrap_or_default()
+            .replace("\"", "") // 去掉可能存在的引号
+            .trim()
+            .to_string()
+    };
 
-    // 2. 型号 (用于显示)
-    let model = get(exif::Tag::Model);
-    
-    // 3. 参数拼接
-    let mut params = Vec::new();
-    
-    let fl = get(exif::Tag::FocalLength);
-    if !fl.is_empty() { params.push(fl); }
-    
-    let f = get(exif::Tag::FNumber);
-    if !f.is_empty() { params.push(f); }
+    // --- 辅助闭包：获取 u32 (ISO, 焦距) ---
+    let get_u32 = |tag| {
+        exif.get_field(tag, In::PRIMARY)
+            .and_then(|f| f.value.get_uint(0))
+    };
 
-    let t = get(exif::Tag::ExposureTime);
-    if !t.is_empty() { params.push(t); }
+    // --- 辅助闭包：获取 f32 (光圈) ---
+    let get_f32 = |tag| {
+        exif.get_field(tag, In::PRIMARY)
+            .and_then(|f| match &f.value {
+                // 1. 无符号分数 (Type 5: Rational) -> num/denom 都是 u32
+                Value::Rational(v) if !v.is_empty() => {
+                    let r = &v[0];
+                    if r.denom == 0 {
+                        None
+                    } else {
+                        Some(r.num as f32 / r.denom as f32)
+                    }
+                },
+                
+                // 2. 有符号分数 (Type 10: SRational) -> num/denom 都是 i32
+                // 🟢 之前报错是因为写成了 UnsignedRational，实际上应该是 SRational
+                Value::SRational(v) if !v.is_empty() => {
+                    let r = &v[0];
+                    if r.denom == 0 {
+                        None
+                    } else {
+                        Some(r.num as f32 / r.denom as f32)
+                    }
+                },
 
-    let iso = get(exif::Tag::PhotographicSensitivity);
-    if !iso.is_empty() { params.push(format!("ISO {}", iso)); }
+                // 3. 浮点数 (Type 11: Float)
+                Value::Float(v) if !v.is_empty() => Some(v[0]),
+                
+                // 4. 双精度浮点 (Type 12: Double) - 为了保险起见加上
+                Value::Double(v) if !v.is_empty() => Some(v[0] as f32),
+                
+                _ => None
+            })
+    };
 
-    (make, model, params.join("  "))
+    // --- 辅助闭包：解析 GPS ---
+    // 这是一个简化实现，如果需要高精度转换，需要把度分秒转十进制
+    // 这里暂时留空或者返回 None，视你引用的 exif 库版本支持情况而定
+    // 为了不报错，我们暂时返回 None，稍后可以专门加一个 GPS 转换函数
+    let lat = None; 
+    let long = None;
+
+    RawExifData {
+        make: get_text(Tag::Make),
+        model: get_text(Tag::Model),
+        lens: get_text(Tag::LensModel),
+        
+        iso: get_u32(Tag::PhotographicSensitivity), // ISO
+        aperture: get_f32(Tag::FNumber),            // 光圈
+        shutter_speed: get_text(Tag::ExposureTime), // 快门 (保留字符串，因为 1/8000 比小数直观)
+        focal_length: get_u32(Tag::FocalLengthIn35mmFilm) // 优先用等效焦距
+            .or_else(|| get_u32(Tag::FocalLength)),       // 没有就用物理焦距
+            
+        datetime: get_text(Tag::DateTimeOriginal),
+        artist: Some(get_text(Tag::Artist)),
+        copyright: Some(get_text(Tag::Copyright)),
+        
+        gps_latitude: lat,
+        gps_longitude: long,
+    }
 }
+
 
 // 🟢 [新增] 快速检查是否存在 EXIF
 pub fn has_exif(path: &str) -> bool {
