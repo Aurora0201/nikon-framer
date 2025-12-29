@@ -2,12 +2,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
 use image::{DynamicImage};
+use std::fmt; // 引入格式化库
 
 // =========================================================
 // 🟢 Logo 资源管理系统 (Brand & Logo Assets)
 // =========================================================
 
 // 1. 品牌枚举
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Brand {
     Nikon,
@@ -16,7 +18,26 @@ pub enum Brand {
     Fujifilm,
     Leica,
     Hasselblad,
+    Other
     // ...
+}
+
+// 🟢 核心：实现 Display 特征
+impl fmt::Display for Brand {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // 这里定义你希望转换成的字符串样子
+        // 通常建议用首字母大写的标准写法
+        let s = match self {
+            Brand::Nikon => "Nikon",
+            Brand::Sony => "Sony",
+            Brand::Canon => "Canon",
+            Brand::Fujifilm => "Fujifilm",
+            Brand::Leica => "Leica",
+            Brand::Hasselblad => "Hasselblad",
+            Brand::Other => "Unkonwn", // 或者是 "Unknown"
+        };
+        write!(f, "{}", s)
+    }
 }
 
 // 2. Logo 具体描述符
