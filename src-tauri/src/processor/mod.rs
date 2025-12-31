@@ -19,6 +19,7 @@ use crate::processor::white::WhiteStyleResources;
 use crate::processor::blur::BlurStyleResources;
 use crate::processor::polaroid::PolaroidResources; // 2. 引入 PolaroidResources
 use crate::processor::blur::BlurInput; // 🟢 引入新结构体
+use crate::processor::master::MasterInput;
 
 // --- 公共辅助结构与函数 ---
 
@@ -116,11 +117,30 @@ impl FrameProcessor for TransparentMasterProcessor {
         let script = FontRef::try_from_slice(&self.script_font).unwrap();
         let serif = FontRef::try_from_slice(&self.serif_font).unwrap();
 
-        let params_str = ctx.params.format_standard();
+        // 🟢 2. 数据转换：从 ctx.params 提取并清洗数据
+        let input = MasterInput {
+            // ISO: Option<u32> -> String
+            iso: ctx.params.iso.map(|v| v.to_string()).unwrap_or_default(),
+            
+            // 光圈: Option<f32> -> String
+            aperture: ctx.params.aperture.map(|v| v.to_string()).unwrap_or_default(),
+            
+            // 🔴 修复点：既然编译器说 shutter_speed 是 String，就直接处理
+            // 移除 .map() 和 .unwrap_or_default()
+            // 如果你的 shutter_speed 确实是 Option<String> 但报错，请尝试下方的【备选方案】
+            shutter: ctx.params.shutter_speed
+                .replace("s", "")
+                .trim()
+                .to_string(),
+                
+            // 焦距: Option<u32> -> String
+            focal: ctx.params.focal_length.map(|v| v.to_string()).unwrap_or_default(),
+        };
 
+        // 🟢 3. 调用新接口
         Ok(master::process(
             img, 
-            &params_str, 
+            input, 
             &main, 
             &script, 
             &serif
