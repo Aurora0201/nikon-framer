@@ -5,7 +5,7 @@ pub mod master;
 pub mod polaroid; // 1. 确保已引入模块
 
 use std::sync::Arc;
-use image::{DynamicImage, ImageBuffer, Rgba, imageops};
+use image::{DynamicImage, imageops};
 use ab_glyph::FontRef; 
 
 use crate::models::StyleOptions;
@@ -20,12 +20,6 @@ use crate::processor::blur::BlurStyleResources;
 use crate::processor::polaroid::PolaroidResources; // 2. 引入 PolaroidResources
 
 // --- 公共辅助结构与函数 ---
-
-pub struct DrawContext<'a> {
-    pub canvas: &'a mut ImageBuffer<Rgba<u8>, Vec<u8>>,
-    pub font: &'a FontRef<'a>,
-    pub font_weight: &'a str,
-}
 
 pub fn resize_image_by_height(img: &DynamicImage, target_height: u32) -> DynamicImage {
     img.resize(target_height * 10, target_height, imageops::FilterType::Lanczos3)
@@ -72,45 +66,32 @@ struct BottomWhiteProcessor {
 impl FrameProcessor for BottomWhiteProcessor {
     fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
         let font = FontRef::try_from_slice(&self.font_data)
-            .map_err(|_| "白底模式: 标准字体解析失败")?;
+            .map_err(|_| "白底模式: 字体解析失败")?;
         
-        // 1. 获取资源：根据 Parser 解析出的 Brand 获取 Logo
-        // 白底模式逻辑：Nikon 用 Wordmark + Z标(如果有)；其他品牌用 Wordmark
-        let assets = match ctx.brand {
-            Brand::Nikon => WhiteStyleResources {
-                main_logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
-                // 这里的判断逻辑属于“排版策略”，Parser 只告诉我们需要什么，这里决定怎么用
-                sub_logo: if ctx.model_name.contains("Z") { 
-                    resources::get_logo(ctx.brand, LogoType::SymbolZ) 
-                } else { None },
-                badge_icon: resources::get_logo(ctx.brand, LogoType::IconYellowBox), 
-            },
-            Brand::Sony => WhiteStyleResources {
-                main_logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
-                sub_logo: resources::get_logo(ctx.brand, LogoType::SymbolAlpha), // Sony 加个 Alpha 标
-                badge_icon: None,
-            },
-            _ => WhiteStyleResources {
-                main_logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
-                sub_logo: None,
-                badge_icon: None,
-            }
+        // // 1. 获取正确的 Logo
+        // let logo_type = if ctx.brand == Brand::Nikon {
+        //     LogoType::IconYellowBox
+        // } else {
+        //     LogoType::Wordmark
+        // };
+        let logo_type= LogoType::Wordmark;
+        let logo_img = resources::get_logo(ctx.brand, logo_type);
+
+        // 2. 组装精简后的资源包
+        let assets = WhiteStyleResources {
+            logo: logo_img, // 🟢 只有这一个字段了
         };
 
-        // 2. 格式化参数
         let params_str = ctx.params.format_standard();
 
-        // 3. 调用旧的绘图函数 (桥接模式)
-        // 注意：我们传的是 ctx.model_name (已经清洗过是 "Z 8" 而不是 "NIKON Z 8")
-        // 以及 ctx.brand.to_string() (因为我们实现了 Display 特征)
+        // 3. 调用新版接口
         Ok(white::process(
             img, 
             &ctx.brand.to_string(), 
-            &ctx.model_name, 
-            &params_str, 
+            &ctx.model_name,        
+            &params_str,            
             &font, 
-            "Bold", 
-            &assets
+            &assets                 
         ))
     }
 }
