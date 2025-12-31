@@ -13,69 +13,6 @@ pub fn measure_text_width(font: &FontRef, text: &str, scale: PxScale) -> u32 {
     width.ceil() as u32
 }
 
-// 🟢 基础像素斜切 (内部使用 helper)
-fn apply_raw_skew(img: &ImageBuffer<Rgba<u8>, Vec<u8>>, skew_factor: f32) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
-    let (w, h) = img.dimensions();
-    let offset_total = (h as f32 * skew_factor).abs().ceil() as u32;
-    let new_w = w + offset_total;
-    let new_h = h;
-
-    let mut output = ImageBuffer::from_pixel(new_w, new_h, Rgba([0, 0, 0, 0]));
-
-    for y in 0..h {
-        // x' = x + (h - y) * factor
-        let shift = ((h - 1 - y) as f32 * skew_factor).round() as i32;
-        for x in 0..w {
-            let pixel = img.get_pixel(x, y);
-            if pixel[3] > 0 {
-                let new_x = x as i32 + shift;
-                if new_x >= 0 && new_x < new_w as i32 {
-                    output.put_pixel(new_x as u32, y, *pixel);
-                }
-            }
-        }
-    }
-    output
-}
-
-// 🟢 高质量斜切文字生成器 (SSAA 抗锯齿版)
-pub fn generate_skewed_text_high_quality(
-    text: &str,
-    font: &FontRef,
-    target_scale: PxScale,
-    color: Rgba<u8>,
-    skew_factor: f32
-) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
-    // 1. 定义超采样倍率 (4倍)
-    let supersample = 4.0;
-    let draw_scale = PxScale::from(target_scale.y * supersample);
-
-    // 2. 计算超大画布的尺寸
-    let text_w = measure_text_width(font, text, draw_scale);
-    let text_h = draw_scale.y.ceil() as u32;
-    
-    let skew_padding = (text_h as f32 * skew_factor).abs().ceil() as u32;
-    let padding_x = 50; 
-    let canvas_w = text_w + skew_padding + padding_x * 2;
-    let canvas_h = text_h + padding_x; 
-
-    let mut large_canvas = ImageBuffer::from_pixel(canvas_w, canvas_h, Rgba([0, 0, 0, 0]));
-
-    // 3. 在超大画布上绘制普通文字
-    let start_x = padding_x as i32;
-    let start_y = (padding_x / 2) as i32;
-    
-    draw_text_mut(&mut large_canvas, color, start_x, start_y, draw_scale, font, text);
-
-    // 4. 应用斜切
-    let skewed_large = apply_raw_skew(&large_canvas, skew_factor);
-
-    // 5. 缩小回目标尺寸 (Lanczos3 抗锯齿)
-    let final_w = (skewed_large.width() as f32 / supersample).ceil() as u32;
-    let final_h = (skewed_large.height() as f32 / supersample).ceil() as u32;
-
-    imageops::resize(&skewed_large, final_w, final_h, imageops::FilterType::Lanczos3)
-}
 
 // 🟢 高质量抗锯齿加粗绘制 (用于直体文字)
 pub fn draw_text_high_quality(
