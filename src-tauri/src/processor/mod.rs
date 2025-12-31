@@ -18,42 +18,12 @@ use crate::resources::{self, Brand, FontFamily, FontWeight, LogoType};
 use crate::processor::white::WhiteStyleResources;
 use crate::processor::blur::BlurStyleResources;
 use crate::processor::polaroid::PolaroidResources; // 2. 引入 PolaroidResources
+use crate::processor::blur::BlurInput; // 🟢 引入新结构体
 
 // --- 公共辅助结构与函数 ---
 
 pub fn resize_image_by_height(img: &DynamicImage, target_height: u32) -> DynamicImage {
     img.resize(target_height * 10, target_height, imageops::FilterType::Lanczos3)
-}
-
-pub fn clean_model_name(make: &str, model: &str) -> String {
-    let make_clean = make.replace("CORPORATION", "").trim().to_string(); 
-    let model_upper = model.to_uppercase();
-    let make_upper = make_clean.to_uppercase();
-    
-    // 提取型号主体
-    let model_base = if let Some(idx) = model_upper.find(&make_upper) {
-        let start = idx + make_upper.len();
-        let rest = &model[start..];
-        rest.trim().to_string()
-    } else {
-        model.to_string()
-    }; 
-
-    // 去除 NIKON 前缀
-    let mut no_make = if model_base.to_uppercase().starts_with("NIKON") {
-        model_base[5..].trim().to_string()
-    } else {
-        model_base
-    };
-    
-    no_make = no_make.trim().to_string();
-    
-    // 去除 Z 前缀 (如果需要)
-    if no_make.to_uppercase().starts_with("Z") {
-        no_make = no_make[1..].trim().to_string();
-    }
-    
-    no_make
 }
 
 // ==========================================
@@ -102,40 +72,31 @@ pub struct TransparentClassicProcessor {
     pub font_data: Arc<Vec<u8>>,
 }
 
+// 实现
 impl FrameProcessor for TransparentClassicProcessor {
     fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
         let font = FontRef::try_from_slice(&self.font_data)
             .map_err(|_| "模糊模式: 标准字体解析失败")?;
             
-        // 资源获取逻辑
-        let assets = match ctx.brand {
-            Brand::Nikon => BlurStyleResources {
-                main_logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
-                sub_logo: if ctx.model_name.contains("Z") {
-                    resources::get_logo(ctx.brand, LogoType::SymbolZ)
-                } else { None },
-            },
-            Brand::Sony => BlurStyleResources {
-                main_logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
-                sub_logo: resources::get_logo(ctx.brand, LogoType::SymbolAlpha),
-            },
-            _ => BlurStyleResources {
-                main_logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
-                sub_logo: None,
-            }
+        // 资源获取 (保持你之前的修改：只取 Wordmark)
+        let assets = BlurStyleResources {
+            logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
         };
         
         let params_str = ctx.params.format_standard();
-        let default_shadow = 150.0;
         
+        // 🟢 2. 构造参数包
+        let input = BlurInput {
+            brand: &ctx.brand.to_string(),
+            model: &ctx.model_name,
+            params: &params_str,
+        };
+        
+        // 🟢 3. 调用新接口
         Ok(blur::process(
             img, 
-            &ctx.brand.to_string(), 
-            &ctx.model_name, 
-            &params_str, 
             &font, 
-            "Bold", 
-            default_shadow, 
+            input, 
             &assets
         ))
     }
@@ -214,7 +175,8 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
         // 高斯模糊模式
         StyleOptions::TransparentClassic => {
             Box::new(TransparentClassicProcessor { 
-                font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold),
+                // 🟢 1. 统一使用 Medium 字体
+                font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Medium),
             })
         },
 
