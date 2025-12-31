@@ -2,11 +2,45 @@ use tauri::{State, Window, Emitter};
 use std::sync::{Arc, atomic::{AtomicUsize, Ordering}}; // 🟢 新增 AtomicUsize
 use std::time::Instant;
 use std::path::Path;
+use std::fs::File; // 🟢 需要引入
+use std::io::BufReader; // 🟢 需要引入
 use crate::models::BatchContext;
 use crate::state::AppState;
 use crate::{processor, metadata}; 
 use rayon::prelude::*; // 🟢 必须引入
 use crate::parser;
+use image::{self, DynamicImage, imageops}; // 🟢 引入 imageops
+
+// =========================================================
+// 🟢 新增：优雅的加载函数 (Private Helper)
+// 职责单一：打开图片，如果有EXIF方向标记，就自动旋转摆正
+// =========================================================
+fn load_image_auto_rotate(path: &str) -> Result<DynamicImage, String> {
+    // 1. 先尝试标准打开
+    let mut img = image::open(path).map_err(|e| e.to_string())?;
+
+    // 2. 偷看一眼 EXIF 方向
+    if let Ok(file) = File::open(path) {
+        let mut bufreader = BufReader::new(&file);
+        let exifreader = exif::Reader::new();
+        
+        if let Ok(exif) = exifreader.read_from_container(&mut bufreader) {
+            if let Some(field) = exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY) {
+                if let Some(orientation) = field.value.get_uint(0) {
+                    // 🟢 修复：将 ImageBuffer 包装回 DynamicImage
+                    img = match orientation {
+                        3 => DynamicImage::ImageRgba8(imageops::rotate180(&img)),
+                        6 => DynamicImage::ImageRgba8(imageops::rotate90(&img)),
+                        8 => DynamicImage::ImageRgba8(imageops::rotate270(&img)),
+                        _ => img, // 这个本身就是 DynamicImage，无需包装
+                    };
+                }
+            }
+        }
+    }
+
+    Ok(img)
+}
 
 #[tauri::command]
 pub async fn start_batch_process_v2(
@@ -57,14 +91,17 @@ pub async fn start_batch_process_v2(
                 return;
             }
 
-            // 2. 加载图片 (IO 操作)
-            let img = match image::open(file_path) {
+           // =========================================================
+            // 🟢 修改点：使用新函数替代 image::open
+            // =========================================================
+            let img = match load_image_auto_rotate(file_path) {
                 Ok(i) => i,
                 Err(e) => {
                     println!("❌ 无法打开: {} -> {}", file_path, e);
                     return; 
                 }
             };
+            // =========================================================
             
             // =========================================================
             // 🟢 核心重构区域 START
