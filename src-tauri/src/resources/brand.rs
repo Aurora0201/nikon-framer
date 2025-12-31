@@ -78,12 +78,12 @@ impl LogoKey {
     fn load_data(&self) -> Option<&'static [u8]> {
         match (self.brand, self.l_type) {
             // === Nikon ===
-            (Brand::Nikon, LogoType::Wordmark)      => Some(include_bytes!("../../assets/logos/Nikon-word.png")),
-            (Brand::Nikon, LogoType::SymbolZ)       => Some(include_bytes!("../../assets/logos/Z.png")),
-            (Brand::Nikon, LogoType::IconYellowBox) => Some(include_bytes!("../../assets/logos/Nikon.png")),
+            (Brand::Nikon, LogoType::Wordmark)      => Some(include_bytes!("../../assets/logos/nikon-wordmark.png")),
+            (Brand::Nikon, LogoType::SymbolZ)       => Some(include_bytes!("../../assets/logos/nikon-symbol-z.png")),
+            (Brand::Nikon, LogoType::IconYellowBox) => Some(include_bytes!("../../assets/logos/nikon-icon-yellow-box.png")),
 
             // === Sony (暂未添加文件，注释以防报错) ===
-            // (Brand::Sony, LogoType::Wordmark)    => Some(include_bytes!("../assets/logos/Sony.png")),
+            (Brand::Sony, LogoType::Wordmark)    => Some(include_bytes!("../../assets/logos/sony-wordmark.png")),
             // (Brand::Sony, LogoType::SymbolAlpha) => Some(include_bytes!("../assets/logos/Alpha.png")),
 
             // === Leica (暂未添加文件) ===
@@ -91,7 +91,7 @@ impl LogoKey {
             // (Brand::Leica, LogoType::IconRedDot) => Some(include_bytes!("../assets/logos/Leica-Red.png")),
 
             // === Canon (暂未添加文件) ===
-            // (Brand::Canon, LogoType::Wordmark)   => Some(include_bytes!("../assets/logos/Canon.png")),
+            (Brand::Canon, LogoType::Wordmark)   => Some(include_bytes!("../../assets/logos/canon-wordmark.png")),
 
             // 其他未定义的组合返回 None
             _ => None,
