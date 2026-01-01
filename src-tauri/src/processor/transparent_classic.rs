@@ -6,6 +6,8 @@ use std::time::Instant;
 use std::sync::Arc;
 use std::cmp::min;
 use crate::graphics::effects::generate_blurred_background;
+// 🟢 新增引入
+use crate::graphics::shadow::ShadowProfile;
 
 use crate::graphics;
 // 引入父模块通用工具
@@ -33,8 +35,7 @@ struct BlurConfig {
     bottom_extra_ratio: f32, 
 
     blur_sigma: f32,         
-    bg_brightness: i32,      
-    process_limit: u32,      
+    bg_brightness: i32,         
 
     font_scale_model: f32,   
     font_scale_params: f32,  
@@ -55,8 +56,7 @@ impl Default for BlurConfig {
             bottom_extra_ratio: 0.85,  
 
             blur_sigma: 120.0,          
-            bg_brightness: -150,       
-            process_limit: 400,        
+            bg_brightness: -150,            
 
             font_scale_model: 0.56,    
             font_scale_params: 0.45,   
@@ -113,14 +113,50 @@ pub fn process(
     println!("  - [PERF] Blur Background: {:.2?}", t_blur.elapsed());
 
     // -------------------------------------------------------------
-    // C. 前景合成
+    // C. 前景合成 (应用玻璃效果 + 投影)
     // -------------------------------------------------------------
-    let glass_img = graphics::apply_rounded_glass_effect(img);
-    let overlay_x = (canvas_w - glass_img.width()) / 2;
-    let border_thickness_diff = (glass_img.height().saturating_sub(height)) / 2;
-    let overlay_y = (border_size as i64) - (border_thickness_diff as i64);
+    
 
-    imageops::overlay(&mut canvas, &glass_img, overlay_x as i64, overlay_y);
+    // =========================================================
+    // 🟢 动态计算阴影参数
+    // =========================================================
+    // 我们定义一套“基准尺寸”，比如 1000px
+    // 如果图片是 5000px，那么所有参数 * 5
+    // 1. 获取原图尺寸 (不再生成 glass_img)
+    let src_w = width;
+    let src_h = height;
+
+    // 计算边框厚度 (为了对齐阴影和前景)
+    // 必须和 draw_glass_foreground_on 里的逻辑保持一致
+    let border_thickness = (width.max(height) as f32 * 0.002).clamp(3.0, 8.0) as u32;
+    
+    // 玻璃整体尺寸 (原图 + 边框)
+    let glass_total_w = src_w + border_thickness * 2;
+    let glass_total_h = src_h + border_thickness * 2;
+
+    // 2. 计算玻璃体在画布上的左上角坐标
+    let glass_x = (canvas_w - glass_total_w) / 2;
+    let height_diff = (glass_total_h.saturating_sub(height)) / 2;
+    let glass_y = (border_size as i64) - (height_diff as i64);
+
+    // 3. 计算原图在画布上的位置 (玻璃位置 + 边框偏移)
+    // draw_glass_foreground_on 需要的是“原图内容”应该画在哪里
+    let img_dest_x = glass_x as i64 + border_thickness as i64;
+    let img_dest_y = glass_y as i64 + border_thickness as i64;
+    
+    let center_x = (glass_x + glass_total_w / 2) as i64;
+    let center_y = (glass_y as i64) + (glass_total_h as i64) / 2;
+    // 🟢 2. 直接应用模板！
+    // 不需要关心图片是 600px 还是 60MP，也不需要手动算 ratio
+    ShadowProfile::preset_standard()
+        .draw_adaptive_shadow_on(
+            &mut canvas,
+            (glass_total_w, glass_total_h),
+            (center_x, center_y)
+        );
+
+    // 3. 画前景
+    graphics::draw_glass_foreground_on(&mut canvas, img, img_dest_x, img_dest_y);
 
     // -------------------------------------------------------------
     // D. 字体与排版计算

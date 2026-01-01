@@ -1,117 +1,8 @@
-use image::{DynamicImage, ImageBuffer, Rgba, imageops, GenericImageView, RgbaImage};
+use image::{DynamicImage, Rgba, imageops, GenericImageView, RgbaImage};
 use imageproc::rect::Rect;
 // 引用同级目录下的 shapes 模块
 use super::shapes::draw_rounded_rect_mut;
 
-pub fn apply_rounded_glass_effect(img: &DynamicImage) -> RgbaImage {
-    // 1. 准备数据，避免不必要的 clone
-    let (w, h) = img.dimensions();
-    
-    // 参数计算
-    let radius_ratio = 0.03;
-    let radius = (w.min(h) as f32 * radius_ratio) as i32;
-    // 半径平方，用于距离判断
-    let r_sq = (radius * radius) as f32;
-    // 边框逻辑保持不变
-    let border_thickness = (w.max(h) as f32 * 0.002).clamp(3.0, 8.0) as u32;
-    let glass_border_color = Rgba([255, 255, 255, 130]);
-
-    // 2. 仅分配一次最终画布 (内存优化点：减少 2/3 的内存占用)
-    let final_w = w + border_thickness * 2;
-    let final_h = h + border_thickness * 2;
-    let mut final_canvas = ImageBuffer::from_pixel(final_w, final_h, Rgba([0, 0, 0, 0]));
-
-    // 3. 绘制玻璃边框底色
-    let border_rect = Rect::at(0, 0).of_size(final_w, final_h);
-    draw_rounded_rect_mut(
-        &mut final_canvas,
-        border_rect,
-        radius + border_thickness as i32,
-        glass_border_color,
-    );
-
-    // 4. 定义需要处理圆角的区域范围
-    // 安全区域：中间不需要计算圆角的十字架区域
-    let safe_x_start = radius as u32;
-    let safe_x_end = w - radius as u32;
-    let safe_y_start = radius as u32;
-    let safe_y_end = h - radius as u32;
-
-    // 5. 核心优化：直接在该画布上操作，无需中间层
-    // 我们遍历原图的像素，将其“贴”到 final_canvas 上
-    // 为了性能，我们不使用全图迭代器，而是手动拆分循环，或在循环中快速跳过
-
-    // 这里为了代码简洁且高性能，我们遍历 source，但根据坐标决定处理逻辑
-    // 由于 image 库的 get_pixel 有边界检查开销，我们在 Release 模式下直接通过坐标计算会更快
-    
-    // 获取原图的只读视图（如果原本就是 Rgba8，这里开销很小）
-    let src_buf = img.to_rgba8(); 
-
-    // A. 快速复制中间的大块区域 (内存拷贝，极快)
-    // 技巧：我们可以把原图切成 9 宫格，中间的 5 格直接 copy，只有 4 个角需要遍历
-    // 为了实现简单，我们采用逐行扫描，但在中间部分直接整行复制并非易事（因为要处理 alpha 混合）。
-    // 但鉴于 overlay 的逻辑是 src 覆盖 dst，只要 alpha=255，直接覆盖即可。
-    
-    for y in 0..h {
-        let is_y_in_corner = y < safe_y_start || y >= safe_y_end;
-        
-        for x in 0..w {
-            let mut p = *src_buf.get_pixel(x, y); // 获取原图像素
-
-            // 目标坐标
-            let dest_x = x + border_thickness;
-            let dest_y = y + border_thickness;
-
-            // 只有在四个角落区域，才需要进行圆角遮罩计算
-            if is_y_in_corner && (x < safe_x_start || x >= safe_x_end) {
-                // 计算相对于圆心的坐标
-                let dx = if x < safe_x_start {
-                    (safe_x_start as f32 - x as f32) - 0.5
-                } else {
-                    (x as f32 - safe_x_end as f32) + 0.5
-                };
-                
-                let dy = if y < safe_y_start {
-                    (safe_y_start as f32 - y as f32) - 0.5
-                } else {
-                    (y as f32 - safe_y_end as f32) + 0.5
-                };
-
-                let dist_sq = dx * dx + dy * dy;
-
-                if dist_sq > r_sq {
-                    // 情况1：完全在圆角外 -> 不绘制（保留底下的玻璃边框）
-                    // 相当于蒙版 alpha = 0
-                    continue; 
-                } else if dist_sq > (radius - 1) as f32 * (radius - 1) as f32 {
-                    // 情况2：圆角边缘 -> 简单的抗锯齿处理 (Anti-Aliasing)
-                    // 计算覆盖率 (粗略版)
-                    let dist = dist_sq.sqrt();
-                    let alpha_factor = (radius as f32 - dist).clamp(0.0, 1.0);
-                    
-                    // 修改原像素 Alpha
-                    let new_alpha = (p[3] as f32 * alpha_factor) as u8;
-                    p = Rgba([p[0], p[1], p[2], new_alpha]);
-                }
-                // 情况3：完全在圆角内 -> 原样绘制
-            }
-
-            // 执行混合绘制 (Overlay)
-            // 因为 final_canvas 上已经有边框颜色了，我们需要做 alpha blending
-            // image::imageops::overlay 会自动处理，但这里我们是像素级操作
-            // 手动 Blend: src over dst
-            if p[3] == 255 {
-                final_canvas.put_pixel(dest_x, dest_y, p);
-            } else if p[3] > 0 {
-                let bg = final_canvas.get_pixel(dest_x, dest_y);
-                final_canvas.put_pixel(dest_x, dest_y, blend_pixel(*bg, p));
-            }
-            // if p[3] == 0, do nothing (keep border)
-        }
-    }
-
-    final_canvas
-}
 
 /// 辅助：简单的 Alpha Blending (Src Over Dst)
 /// 只有在边缘抗锯齿时才会调用，调用频率极低
@@ -196,4 +87,108 @@ pub fn generate_blurred_background(
 
     // 6. 放大回目标尺寸 (Triangle 插值保证平滑)
     blurred.resize_exact(target_w, target_h, imageops::FilterType::Triangle)
+}
+
+
+/// 🟢 [高性能] 直接将原图作为圆角玻璃前景绘制到目标画布上
+/// 避免生成中间的大尺寸 glass_img，大幅减少内存分配和拷贝
+pub fn draw_glass_foreground_on(
+    canvas: &mut RgbaImage,      // 目标画布
+    img: &DynamicImage,          // 源图
+    dest_x: i64,                 // 目标位置 X
+    dest_y: i64,                 // 目标位置 Y
+) {
+    let (w, h) = img.dimensions();
+    let (canvas_w, canvas_h) = canvas.dimensions();
+
+    // 1. 参数计算
+    let radius_ratio = 0.03;
+    let radius = (w.min(h) as f32 * radius_ratio) as i32;
+    let r_sq = (radius * radius) as f32;
+    
+    let border_thickness = (w.max(h) as f32 * 0.002).clamp(3.0, 8.0) as u32;
+    let glass_border_color = Rgba([255, 255, 255, 130]);
+
+    // 2. 先在画布上画出边框底座 (直接操作 canvas)
+    // 边框比原图大，所以要偏移回去
+    let border_x = dest_x - border_thickness as i64;
+    let border_y = dest_y - border_thickness as i64;
+    let border_w = w + border_thickness * 2;
+    let border_h = h + border_thickness * 2;
+
+    // 绘制圆角矩形边框
+    // 注意：draw_rounded_rect_mut 需要 Rect，坐标需要处理 i32 转换
+    let border_rect = Rect::at(border_x as i32, border_y as i32)
+        .of_size(border_w, border_h);
+    
+    draw_rounded_rect_mut(
+        canvas,
+        border_rect,
+        radius + border_thickness as i32,
+        glass_border_color,
+    );
+
+    // 3. 逐像素绘制原图 (带圆角裁切)
+    // 这是一个手动的 "Overlay + Mask" 过程
+    let src_buf = img.to_rgba8();
+    
+    let safe_x_start = radius as u32;
+    let safe_x_end = w - radius as u32;
+    let safe_y_start = radius as u32;
+    let safe_y_end = h - radius as u32;
+
+    // 为了性能，我们手动计算相交区域，只遍历可见部分
+    // 避免 dest_x 为负数时的越界问题
+    let start_x = 0.max(-dest_x) as u32;
+    let start_y = 0.max(-dest_y) as u32;
+    let end_x = w.min((canvas_w as i64 - dest_x) as u32);
+    let end_y = h.min((canvas_h as i64 - dest_y) as u32);
+
+    for y in start_y..end_y {
+        let is_y_in_corner = y < safe_y_start || y >= safe_y_end;
+        
+        // 计算目标画布上的绝对 Y
+        let cy = (dest_y + y as i64) as u32;
+        
+        for x in start_x..end_x {
+            let mut p = *src_buf.get_pixel(x, y);
+            
+            // --- 圆角逻辑 (与之前相同) ---
+            if is_y_in_corner && (x < safe_x_start || x >= safe_x_end) {
+                let dx = if x < safe_x_start {
+                    (safe_x_start as f32 - x as f32) - 0.5
+                } else {
+                    (x as f32 - safe_x_end as f32) + 0.5
+                };
+                let dy = if y < safe_y_start {
+                    (safe_y_start as f32 - y as f32) - 0.5
+                } else {
+                    (y as f32 - safe_y_end as f32) + 0.5
+                };
+                let dist_sq = dx * dx + dy * dy;
+
+                if dist_sq > r_sq {
+                    continue; // 在圆角外，不绘制 (保留底下的玻璃边框)
+                } else if dist_sq > (radius - 1) as f32 * (radius - 1) as f32 {
+                    // 抗锯齿
+                    let dist = dist_sq.sqrt();
+                    let alpha_factor = (radius as f32 - dist).clamp(0.0, 1.0);
+                    let new_alpha = (p[3] as f32 * alpha_factor) as u8;
+                    p = Rgba([p[0], p[1], p[2], new_alpha]);
+                }
+            }
+            
+            // --- 写入画布 (Overlay 混合) ---
+            let cx = (dest_x + x as i64) as u32;
+            
+            // 简单的 SrcOver 混合 (假设 canvas 不透明则直接覆盖更快)
+            if p[3] == 255 {
+                canvas.put_pixel(cx, cy, p);
+            } else if p[3] > 0 {
+                let bg = canvas.get_pixel(cx, cy);
+                let blended = blend_pixel(*bg, p);
+                canvas.put_pixel(cx, cy, blended);
+            }
+        }
+    }
 }
