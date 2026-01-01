@@ -16,10 +16,10 @@ pub struct FontConfig {
 pub enum StyleOptions {
     // 变体 1：白底模式 (只关心字体)
     #[serde(rename_all = "camelCase")] // 🟢 必须加在这里！
-    BottomWhite,
+    WhiteClassic,
 
     #[serde(rename_all = "camelCase")] // 🟢 必须加在这里！
-    PolaroidWhite,
+    WhitePolaroid,
 
     // 变体 2：高斯模糊 (关心字体 + 阴影)
     #[serde(rename_all = "camelCase")] // 🟢 必须加在这里！
@@ -38,10 +38,10 @@ pub enum StyleOptions {
 impl StyleOptions {
     pub fn filename_suffix(&self) -> &'static str {
         match self {
-            Self::BottomWhite => "BottomWhite",      // 对应生成 xxx_White.jpg
+            Self::WhiteClassic => "WhiteClassic",      // 对应生成 xxx_White.jpg
             Self::TransparentClassic => "TransparentClassic", // 对应生成 xxx_Blur.jpg
             Self::TransparentMaster => "TransparentMaster",// 对应生成 xxx_Master.jpg
-            Self::PolaroidWhite => "PolaroidWhite"
+            Self::WhitePolaroid => "WhitePolaroid"
             // 以后新增样式，只需要在这里加一行
         }
     }

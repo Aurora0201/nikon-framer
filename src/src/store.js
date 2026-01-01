@@ -6,8 +6,8 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 // 注意：前端显示的图片 ID 必须与 Rust 枚举后缀逻辑对应
 const PRESET_CONFIGS = {
   ClassicWhite: [
-    { id: 'BottomWhite', name: 'Standard White', desc: '标准白底 / 简约风格', img: 'white_standard.jpg' },
-    { id: 'PolaroidWhite', name: 'Polaroid White', desc: '宝丽来风格', img: 'polaroid_white.jpg' },
+    { id: 'WhiteClassic', name: 'Standard White', desc: '标准白底 / 简约风格', img: 'white_standard.jpg' },
+    { id: 'WhitePolaroid', name: 'Polaroid White', desc: '宝丽来风格', img: 'polaroid_white.jpg' },
   ],
   Transparent: [
     { id: 'TransparentMaster', name: 'Glass Blur', desc: '大师风格 / 模糊', img: 'transparent_standard.jpg' },

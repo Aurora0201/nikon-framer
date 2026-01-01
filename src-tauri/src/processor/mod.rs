@@ -1,8 +1,8 @@
-pub mod white;
-pub mod blur;
+pub mod white_classic;
+pub mod transparent_classic;
 pub mod traits;
-pub mod master;
-pub mod polaroid; // 1. 确保已引入模块
+pub mod transparent_master;
+pub mod white_polaroid; // 1. 确保已引入模块
 
 use std::sync::Arc;
 use image::{DynamicImage, imageops};
@@ -15,11 +15,11 @@ use crate::parser::models::ParsedImageContext;
 // 引入资源模块
 use crate::resources::{self, Brand, FontFamily, FontWeight, LogoType};
 // 引入各个子模块的特定资源结构体
-use crate::processor::white::WhiteStyleResources;
-use crate::processor::blur::BlurStyleResources;
-use crate::processor::polaroid::{PolaroidInput, PolaroidResources}; // 2. 引入 PolaroidResources
-use crate::processor::blur::BlurInput; // 🟢 引入新结构体
-use crate::processor::master::MasterInput;
+use crate::processor::white_classic::WhiteStyleResources;
+use crate::processor::transparent_classic::BlurStyleResources;
+use crate::processor::white_polaroid::{PolaroidInput, PolaroidResources}; // 2. 引入 PolaroidResources
+use crate::processor::transparent_classic::BlurInput; // 🟢 引入新结构体
+use crate::processor::transparent_master::MasterInput;
 
 // --- 公共辅助结构与函数 ---
 
@@ -56,7 +56,7 @@ impl FrameProcessor for BottomWhiteProcessor {
         let params_str = ctx.params.format_standard();
 
         // 3. 调用新版接口
-        Ok(white::process(
+        Ok(white_classic::process(
             img, 
             &ctx.brand.to_string(), 
             &ctx.model_name,        
@@ -94,7 +94,7 @@ impl FrameProcessor for TransparentClassicProcessor {
         };
         
         // 🟢 3. 调用新接口
-        Ok(blur::process(
+        Ok(transparent_classic::process(
             img, 
             &font, 
             input, 
@@ -138,7 +138,7 @@ impl FrameProcessor for TransparentMasterProcessor {
         };
 
         // 🟢 3. 调用新接口
-        Ok(master::process(
+        Ok(transparent_master::process(
             img, 
             input, 
             &main, 
@@ -175,7 +175,7 @@ impl FrameProcessor for PolaroidProcessor {
             params: &params_str,
         };
 
-        Ok(polaroid::process(
+        Ok(white_polaroid::process(
             img, 
             &font, 
             input, // 传入 input
@@ -191,7 +191,7 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
     match options {
         
         // 极简白底模式
-        StyleOptions::BottomWhite => {
+        StyleOptions::WhiteClassic => {
             Box::new(BottomWhiteProcessor { 
                 font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold) 
             })
@@ -217,7 +217,7 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
         // 4. 注册 PolaroidWhite 模式
         // 修复：之前这里错误地初始化了 TransparentMasterProcessor
         // 现在正确初始化 PolaroidProcessor 并使用 InterDisplay-Regular
-        StyleOptions::PolaroidWhite => {
+        StyleOptions::WhitePolaroid => {
             Box::new(PolaroidProcessor {
                 font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Medium),
             })
