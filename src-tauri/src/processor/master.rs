@@ -1,11 +1,26 @@
-// src-tauri/src/processor/master.rs
+// src/processor/master.rs
 
 use image::{DynamicImage, Rgba, GenericImageView, imageops};
 use ab_glyph::{FontRef, PxScale};
 use imageproc::drawing::{draw_text_mut, draw_line_segment_mut};
-use std::time::Instant; // 🟢 [新增] 引入计时器
+use std::time::Instant;
 
-// 布局配置中心 (保持之前的逻辑不变)
+// ==========================================
+// 1. 数据结构定义
+// ==========================================
+
+/// 🟢 [新增] Master 模式专用输入参数
+/// 用于接收已经清洗好的、分拆的参数
+pub struct MasterInput {
+    pub iso: String,      // 例如 "200" (不带 ISO 前缀)
+    pub aperture: String, // 例如 "2.8" (不带 f/ 前缀)
+    pub shutter: String,  // 例如 "1/1000" (不带 s 后缀)
+    pub focal: String,    // 例如 "50" (不带 mm 后缀)
+}
+
+// ==========================================
+// 2. 布局配置中心 (保持不变)
+// ==========================================
 struct MasterLayoutConfig {
     border_ratio: f32,
     bottom_ratio: f32,
@@ -46,19 +61,18 @@ impl MasterLayoutConfig {
     }
 }
 
+// ==========================================
+// 3. 核心处理逻辑
+// ==========================================
 pub fn process(
     img: &DynamicImage,
-    params: &str,
+    input: MasterInput,    // 🟢 [修改] 接收结构化数据
     main_font: &FontRef,   
     script_font: &FontRef, 
     serif_font: &FontRef,  
 ) -> DynamicImage {
-    // 🟢 [DEBUG] 开始计时
     let start_total = Instant::now();
-    
     let cfg = MasterLayoutConfig::default();
-    println!("--------------------------------------------------");
-    println!("[DEBUG] Master Process Start. Params: '{}'", params);
 
     let (img_w, img_h) = img.dimensions();
     let is_portrait = img_h > img_w;
@@ -69,29 +83,26 @@ pub fn process(
     let canvas_w = img_w + (border_size * 2);
     let canvas_h = img_h + border_size + bottom_height;
 
-    // 🟢 [DEBUG] 阶段计时：背景生成
+    // 3. 生成背景
     let start_bg = Instant::now();
-    
-    // 3. 生成背景 (使用优化后的高性能算法)
     let mut canvas = create_aspect_fill_bg_optimized(img, canvas_w, canvas_h, cfg.bg_blur_radius);
     canvas = canvas.brighten(-15); 
-    
-    println!("[PERF] 背景生成耗时: {:?}", start_bg.elapsed());
+    println!("[PERF] Master Bg Generation: {:?}", start_bg.elapsed());
 
-    // 🟢 [DEBUG] 阶段计时：叠加与排版
     let start_overlay = Instant::now();
 
     // 4. 贴入原图
     imageops::overlay(&mut canvas, img, border_size as i64, border_size as i64);
 
-    // 5. 解析 & 清洗参数
-    let (iso_raw, aperture_raw, shutter_raw, focal_raw) = parse_params_smart(params);
-    let iso_val = clean_param(&iso_raw, "ISO");
-    let aperture_val = clean_param(&aperture_raw, "f/");
-    let focal_val = clean_param(&focal_raw, "mm");
-    let shutter_val = clean_param(&shutter_raw, "s");
+    // 5. 🟢 [修改] 直接使用输入数据
+    // 假设 Parser 层传入的已经是清洗好的纯数字/字符 (如 "800", "2.8")
+    // 具体的标签 ("ISO", "F", "mm", "S") 会在下面的 draw_column_absolute 中添加
+    let iso_val = input.iso;
+    let aperture_val = input.aperture;
+    let focal_val = input.focal;
+    let shutter_val = input.shutter;
 
-    // 6. 排版计算 (保持之前修正后的逻辑：仅缩小下方两行)
+    // 6. 排版计算 (保持不变)
     let bh = bottom_height as f32;
     let center_x = canvas_w as i32 / 2;
     
@@ -159,64 +170,48 @@ pub fn process(
     draw_separator(&mut canvas, center_x, sep_center_y, sep_actual_h, sep_color);
     draw_separator(&mut canvas, center_x + gap, sep_center_y, sep_actual_h, sep_color);
 
-    println!("[PERF] 排版与合成耗时: {:?}", start_overlay.elapsed());
-    println!("[PERF] 总耗时: {:?}", start_total.elapsed());
+    println!("[PERF] Master Layout: {:?}", start_overlay.elapsed());
+    println!("[PERF] Master Total: {:?}", start_total.elapsed());
 
     canvas
 }
 
 // ---------------------------------------------------------
-// 辅助函数
+// 辅助函数 (保持不变)
 // ---------------------------------------------------------
 
-// 🟢 [高性能版] 缩图 -> 模糊 -> 放大
+// [高性能版] 缩图 -> 模糊 -> 放大
 fn create_aspect_fill_bg_optimized(img: &DynamicImage, target_w: u32, target_h: u32, blur_radius: f32) -> DynamicImage {
-    // 1. 定义缩小倍数 (Scale Factor)
-    // 对于高斯模糊背景，1/10 甚至 1/20 的分辨率足以提供平滑的色块，且速度提升百倍
-    // 我们限制短边至少保留 300px，防止过度马赛克
     let (src_w, src_h) = img.dimensions();
     let min_dimension = 300.0;
     
-    // 计算缩放比例
-    let scale_factor = (min_dimension / (src_w.min(src_h) as f64)).min(0.2); // 最多缩小到 20%
+    let scale_factor = (min_dimension / (src_w.min(src_h) as f64)).min(0.2); 
     
     let tiny_w = (src_w as f64 * scale_factor) as u32;
     let tiny_h = (src_h as f64 * scale_factor) as u32;
 
-    // 2. 缩小原图 (使用 Nearest 即可，因为马上要模糊，不需要高质量插值)
     let tiny_img = img.resize_exact(tiny_w, tiny_h, imageops::FilterType::Nearest);
 
-    // 3. 计算对应的 target 尺寸的缩小版
-    // 我们需要先裁切出 target 的比例，但是是在 tiny 图上裁
     let ratio_target = target_w as f64 / target_h as f64;
     let ratio_tiny = tiny_w as f64 / tiny_h as f64;
 
     let (crop_w, crop_h) = if ratio_target > ratio_tiny {
-        // 目标更宽，以宽为准
         (tiny_w, (tiny_w as f64 / ratio_target) as u32)
     } else {
-        // 目标更高，以高为准
         ((tiny_h as f64 * ratio_target) as u32, tiny_h)
     };
 
     let crop_x = (tiny_w - crop_w) / 2;
     let crop_y = (tiny_h - crop_h) / 2;
 
-    // 4. 在小图上裁切
     let cropped_tiny = tiny_img.crop_imm(crop_x, crop_y, crop_w, crop_h);
 
-    // 5. 应用等效模糊半径
-    // 原图模糊 150px，缩图后模糊半径 = 150 * scale_factor
     let effective_blur = blur_radius * (scale_factor as f32);
-    
-    // 执行模糊 (此时计算量极小)
     let blurred_tiny = cropped_tiny.blur(effective_blur);
 
-    // 6. 放大回目标尺寸 (使用 Triangle 线性插值保证过渡平滑)
     blurred_tiny.resize_exact(target_w, target_h, imageops::FilterType::Triangle)
 }
 
-// ⬇️ 其他辅助函数保持不变
 fn draw_wide_text(canvas: &mut DynamicImage, center_x: i32, y: i32, text: &str, font: &FontRef, size: f32, color: Rgba<u8>) {
     let scale = PxScale { x: size, y: size };
     let tracking = size * 0.4; 
@@ -251,31 +246,5 @@ fn draw_centered_text(canvas: &mut DynamicImage, text: &str, x: i32, y: i32, fon
     draw_text_mut(canvas, color, draw_x, y, scale, font, text);
 }
 
-fn parse_params_smart(params: &str) -> (String, String, String, String) {
-    let parts: Vec<&str> = params.split_whitespace().collect();
-    let mut iso = String::from("");
-    let mut aperture = String::from("");
-    let mut shutter = String::from("");
-    let mut focal = String::from("");
-    for (i, part) in parts.iter().enumerate() {
-        let p = part.to_lowercase();
-        if p == "mm" { if i > 0 { focal = parts[i-1].to_string(); } } 
-        else if p.ends_with("mm") { focal = part.to_string(); } 
-        else if p.starts_with("f/") || (p.starts_with("f") && p.len() > 1 && p.chars().nth(1).unwrap().is_numeric()) { aperture = part.to_string(); }
-        else if p == "s" { if i > 0 { shutter = parts[i-1].to_string(); } }
-        else if p.ends_with("s") && !p.contains("iso") { shutter = part.to_string(); }
-        else if p.contains("1/") { shutter = part.to_string(); }
-        else if p == "iso" { if i + 1 < parts.len() { iso = format!("ISO {}", parts[i+1]); } }
-        else if p.starts_with("iso") { let val = p.replace("iso", ""); if !val.is_empty() { iso = format!("ISO {}", val); } }
-        else if part.chars().all(|c| c.is_numeric()) { iso = format!("ISO {}", part); }
-    }
-    (iso, aperture, shutter, focal)
-}
-
-fn clean_param(raw: &str, remove: &str) -> String {
-    raw.to_uppercase()
-        .replace(&remove.to_uppercase(), "")
-        .replace(&remove.to_lowercase(), "")
-        .trim()
-        .to_string()
-}
+// 🔴 已移除 parse_params_smart
+// 🔴 已移除 clean_param

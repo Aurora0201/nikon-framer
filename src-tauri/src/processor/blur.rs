@@ -1,236 +1,237 @@
 use image::{DynamicImage, GenericImageView, Rgba, imageops};
 use ab_glyph::{FontRef, PxScale};
+// 🟢 1. 引入 draw_text_mut
+use imageproc::drawing::{text_size, draw_text_mut};
 use std::time::Instant;
 use std::sync::Arc;
+use std::cmp::min;
 
 use crate::graphics;
-// 引入父模块公共工具
-use super::{clean_model_name, resize_image_by_height};
+// 引入父模块通用工具
+use super::resize_image_by_height;
 
-// 🟢 [关键修改] 定义模糊模板所需的资源槽位
-// 模糊模式通常不需要 badge_icon (左上角小标)，只需要中间的主副标
+// ==========================================
+// 1. 数据结构定义
+// ==========================================
+
 pub struct BlurStyleResources {
-    // 对应主Logo位置 (如 "Nikon", "Sony")
-    pub main_logo: Option<Arc<DynamicImage>>, 
-    
-    // 对应副Logo位置 (如 "Z", "Alpha")
-    pub sub_logo:  Option<Arc<DynamicImage>>, 
+    pub logo: Option<Arc<DynamicImage>>, 
 }
 
-/// 内部配置结构体：统一管理参数
+pub struct BlurInput<'a> {
+    pub brand: &'a str,
+    pub model: &'a str,
+    pub params: &'a str,
+}
+
+// ==========================================
+// 2. 布局配置
+// ==========================================
 struct BlurConfig {
-    // --- 基础布局 ---
-    border_ratio: f32,       // 边框占宽度的比例
-    bottom_extra_ratio: f32, // 底部留白高度比例
+    border_ratio: f32,       
+    bottom_extra_ratio: f32, 
 
-    // --- 背景与特效 ---
-    blur_sigma: f32,         // 模糊强度
-    bg_brightness: i32,      // 背景亮度调整
-    process_limit: u32,      // 处理时的最大像素限制(优化性能)
+    blur_sigma: f32,         
+    bg_brightness: i32,      
+    process_limit: u32,      
 
-    // --- 字体与排版 ---
-    font_size_model_ratio: f32,  // 机型文字大小
-    font_size_params_ratio: f32, // 参数文字大小
-    line_gap_ratio: f32,         // 两行文字的基础间距
-    text_block_centering_ratio: f32, // 文字块整体垂直居中比例
-
-    // --- Logo 与 机型文字微调 ---
-    logo_main_scale: f32,  // 主Logo大小比例 (原 word)
-    logo_sub_scale: f32,   // 副Logo大小比例 (原 z)
-    model_text_scale: f32, // 机型文字大小比例
+    font_scale_model: f32,   
+    font_scale_params: f32,  
     
-    // 机型数字(如"50")的独立垂直偏移比例
-    model_text_y_shift_ratio: f32, 
+    logo_height_ratio: f32,  
+
+    gap_logo_text_ratio: f32, 
+    gap_lines_ratio: f32,     
+    
+    text_color_model: Rgba<u8>,
+    text_color_params: Rgba<u8>,
 }
 
 impl Default for BlurConfig {
     fn default() -> Self {
         Self {
-            border_ratio: 0.08,
-            bottom_extra_ratio: 0.6,
+            border_ratio: 0.08,        
+            bottom_extra_ratio: 0.85,  
+
+            blur_sigma: 30.0,          
+            bg_brightness: -150,       
+            process_limit: 400,        
+
+            font_scale_model: 0.56,    
+            font_scale_params: 0.45,   
+
+            logo_height_ratio: 0.85,   
             
-            blur_sigma: 30.0,
-            bg_brightness: -180,
-            process_limit: 400,
+            gap_logo_text_ratio: 0.6,  
+            gap_lines_ratio: 0.60,     
 
-            font_size_model_ratio: 0.55,
-            font_size_params_ratio: 0.32,
-            line_gap_ratio: 0.12,
-            text_block_centering_ratio: 0.5,
-
-            logo_main_scale: 0.8,
-            logo_sub_scale: 0.6,
-            model_text_scale: 0.65,
-
-            // 0.10 大约下移 15px (视分辨率而定)
-            model_text_y_shift_ratio: 0.10, 
+            text_color_model: Rgba([255, 255, 255, 255]),
+            text_color_params: Rgba([220, 220, 220, 255]),
         }
     }
 }
 
+// ==========================================
+// 3. 核心处理逻辑
+// ==========================================
 pub fn process(
     img: &DynamicImage,
-    camera_make: &str,
-    camera_model: &str,
-    shooting_params: &str,
     font: &FontRef,
-    font_weight: &str,
-    _shadow_intensity: f32, // 变量不再使用，加下划线避免警告，或者你可以直接从参数中移除
+    input: BlurInput,
     assets: &BlurStyleResources 
 ) -> DynamicImage {
-    // 初始化配置
-    let cfg = BlurConfig::default();
-    
     let t0 = Instant::now();
+    let cfg = BlurConfig::default();
     let (width, height) = img.dimensions();
 
     // -------------------------------------------------------------
-    // 【修改点】 视觉一致性修复
+    // A. 尺寸计算
     // -------------------------------------------------------------
-    // 原来是: let border_size = (width as f32 * cfg.border_ratio) as u32;
-    // 修改为: 使用 width 和 height 中的较小值(或者较大值)作为基准
-    
-    // 方案 A (推荐): 基于短边。这通常能带来最稳健的比例。
-    let ref_size = width.min(height) as f32;
+    let ref_size = min(width, height) as f32;
+    let border_size = (ref_size * cfg.border_ratio) as u32;
+    let bottom_extra_h = (border_size as f32 * cfg.bottom_extra_ratio) as u32;
 
-    // 1. 基础尺寸
-    let border_size = (ref_size as f32 * cfg.border_ratio) as u32; 
-    let bottom_extra = (border_size as f32 * cfg.bottom_extra_ratio) as u32; 
     let canvas_w = width + border_size * 2;
-    let canvas_h = height + border_size * 2 + bottom_extra;
+    let canvas_h = height + border_size * 2 + bottom_extra_h;
 
-    // 2. 模糊背景 (保留你原有的 resize 优化)
+    // -------------------------------------------------------------
+    // B. 背景生成
+    // -------------------------------------------------------------
     let t_blur = Instant::now();
-    let scale_factor_bg = (width.max(height) as f32 / cfg.process_limit as f32).max(1.0);
-    let small_w = (canvas_w as f32 / scale_factor_bg) as u32;
-    let small_h = (canvas_h as f32 / scale_factor_bg) as u32;
+    let scale_factor = (width.max(height) as f32 / cfg.process_limit as f32).max(1.0);
+    let small_w = (canvas_w as f32 / scale_factor) as u32;
+    let small_h = (canvas_h as f32 / scale_factor) as u32;
     
     let small_img = img.resize_exact(small_w, small_h, imageops::FilterType::Nearest);
     let mut blurred = small_img.blur(cfg.blur_sigma);
     imageops::colorops::brighten(&mut blurred, cfg.bg_brightness);
     
-    // 背景放大回原尺寸
     let mut canvas = blurred.resize_exact(canvas_w, canvas_h, imageops::FilterType::Triangle).to_rgba8();
-    println!("  - [PERF] 高斯模糊背景生成: {:.2?}", t_blur.elapsed());
+    println!("  - [PERF] Blur Background: {:.2?}", t_blur.elapsed());
 
     // -------------------------------------------------------------
-    // 3. 合成前景 (保留玻璃特效，移除阴影)
+    // C. 前景合成
     // -------------------------------------------------------------
-    let t_composite = Instant::now();
-    
-    // A. 处理玻璃本体 (Glass) - 这一步通常给图片加圆角或内描边
     let glass_img = graphics::apply_rounded_glass_effect(img);
-    
-    // B. 计算位置并直接合成
-    // 计算前景图相对于原图扩大的厚度（假设 apply_rounded_glass_effect 增加了边框）
-    // 如果 glass_img 和原图一样大，border_thickness 就是 0
-    let border_thickness_h = (glass_img.height().saturating_sub(height)) / 2;
-
-    // 定位逻辑：
-    // X轴居中
     let overlay_x = (canvas_w - glass_img.width()) / 2;
-    // Y轴：放置在顶部的 border_size 处（减去特效增加的厚度，确保原图内容位置视觉正确）
-    let overlay_y = (border_size as i64) - (border_thickness_h as i64);
-    
+    let border_thickness_diff = (glass_img.height().saturating_sub(height)) / 2;
+    let overlay_y = (border_size as i64) - (border_thickness_diff as i64);
+
     imageops::overlay(&mut canvas, &glass_img, overlay_x as i64, overlay_y);
-    
-    println!("  - [PERF] 玻璃特效合成 (无阴影): {:.2?}", t_composite.elapsed());
 
-    // 4. 文字布局计算 (保持不变)
-    let text_color = Rgba([255, 255, 255, 255]); 
-    let sub_text_color = Rgba([200, 200, 200, 255]); 
-    
-    let font_size_model = border_size as f32 * cfg.font_size_model_ratio; 
-    let font_size_params = border_size as f32 * cfg.font_size_params_ratio; 
+    // -------------------------------------------------------------
+    // D. 字体与排版计算
+    // -------------------------------------------------------------
+    let font_size_model = border_size as f32 * cfg.font_scale_model;
+    let font_size_params = border_size as f32 * cfg.font_scale_params;
+    let scale_model = PxScale::from(font_size_model);
     let scale_params = PxScale::from(font_size_params);
+
+    // 🟢 直接使用 input.model (Parser 已经清洗过)
+    let model_str = input.model; 
+
+    // --- 1. 测量第一行 [Logo] [Gap] [Model] ---
+    let mut line1_width = 0;
+    let mut line1_height = 0;
+    let mut logo_draw_w = 0;
+    let mut logo_draw_h = 0;
+    let mut scaled_logo = None;
+
+    if let Some(logo) = &assets.logo {
+        let target_h = (font_size_model * cfg.logo_height_ratio) as u32;
+        let white_logo = graphics::make_image_white(logo);
+        let resized = resize_image_by_height(&white_logo, target_h);
+        
+        logo_draw_w = resized.width() as u32;
+        logo_draw_h = resized.height() as u32;
+        scaled_logo = Some(resized);
+        
+        line1_width += logo_draw_w;
+    }
+
+    let (model_text_w, model_text_h) = if !model_str.is_empty() {
+        let (w, h) = text_size(scale_model, font, model_str);
+        (w as u32, h as u32)
+    } else {
+        (0, 0)
+    };
+
+    if model_text_w > 0 {
+        if logo_draw_w > 0 {
+            line1_width += (font_size_model * cfg.gap_logo_text_ratio) as u32;
+        }
+        line1_width += model_text_w;
+        line1_height = model_text_h; 
+    }
+    if line1_height == 0 { line1_height = logo_draw_h; }
+
+    // --- 2. 测量第二行 [Params] ---
+    let (params_w, params_h) = if !input.params.is_empty() {
+        let (w, h) = text_size(scale_params, font, input.params);
+        (w as u32, h as u32)
+    } else {
+        (0, 0)
+    };
+
+    // --- 3. 垂直布局 ---
+    let gap_lines = (font_size_model * cfg.gap_lines_ratio) as u32;
+    let total_block_h = line1_height + gap_lines + params_h;
+
+    let bottom_area_y = border_size + height; 
+    let bottom_area_h = border_size + bottom_extra_h; 
+    let block_start_y = bottom_area_y as u32 + (bottom_area_h - total_block_h) / 2;
+
+    // -------------------------------------------------------------
+    // E. 绘制
+    // -------------------------------------------------------------
     
-    let text_area_start_y = (border_size + height) as f32;
-    let text_area_total_h = (border_size + bottom_extra) as f32;
-    let line_gap = font_size_model * cfg.line_gap_ratio; 
-    
-    let text_block_h = font_size_model + line_gap + font_size_params;
-    let padding_top = (text_area_total_h - text_block_h) * cfg.text_block_centering_ratio;
-    
-    let line1_y = (text_area_start_y + padding_top).round() as i32;
-    let line2_y = (text_area_start_y + padding_top + font_size_model + line_gap).round() as i32;
+    // --- 第一行 ---
+    if line1_width > 0 {
+        let mut cursor_x = (canvas_w - line1_width) / 2;
+        let line1_base_y = block_start_y; 
 
-    // 5. 绘制第一行：Logo + 机型文字
-    if !camera_model.is_empty() {
-        let base_h = font_size_model * 1.2; 
+        // Logo
+        if let Some(logo) = scaled_logo {
+            let offset_y = if line1_height > logo_draw_h {
+                (line1_height - logo_draw_h) / 2
+            } else { 0 };
+            
+            imageops::overlay(&mut canvas, &logo, cursor_x as i64, (line1_base_y + offset_y) as i64);
+            cursor_x += logo_draw_w + (font_size_model * cfg.gap_logo_text_ratio) as u32;
+        }
 
-        // 使用配置参数
-        let h_main = (base_h * cfg.logo_main_scale) as u32;
-        let h_sub  = (base_h * cfg.logo_sub_scale) as u32;
-        let s_text = base_h * cfg.model_text_scale;
-
-        let spacing = (font_size_model * 0.3) as u32; 
-        let mut total_w = 0;
-
-        // --- A. 预处理资源 (转白 + 缩放) ---
-        let scaled_main = if let Some(logo) = &assets.main_logo {
-            let white_img = graphics::make_image_white(logo); 
-            let s = resize_image_by_height(&white_img, h_main);
-            total_w += s.width() + spacing;
-            Some(s)
-        } else { None };
-
-        let scaled_sub = if let Some(logo) = &assets.sub_logo {
-            let white_img = graphics::make_image_white(logo);
-            let s = resize_image_by_height(&white_img, h_sub);
-            total_w += s.width() + spacing;
-            Some(s)
-        } else { None };
-
-        let model_str = clean_model_name(camera_make, camera_model);
-        let text_img = if !model_str.is_empty() {
-            let img = graphics::generate_skewed_text_high_quality(
-                &model_str, font, PxScale::from(s_text), text_color, 0.23
+        // 机型文字
+        if model_text_w > 0 {
+            // 🟢 2. 直接使用 draw_text_mut
+            draw_text_mut(
+                &mut canvas, 
+                cfg.text_color_model, 
+                cursor_x as i32, 
+                line1_base_y as i32, 
+                scale_model, 
+                font, 
+                model_str
             );
-            total_w += img.width();
-            Some(img)
-        } else { None };
-
-        // --- B. 绘制元素 ---
-        let mut current_x = (canvas_w as i32 - total_w as i32) / 2;
-        let row_center_y = line1_y + (font_size_model as i32 / 2);
-
-        if let Some(img) = scaled_main {
-            let y = row_center_y - (img.height() as i32 / 2);
-            imageops::overlay(&mut canvas, &img, current_x as i64, y as i64);
-            current_x += img.width() as i32 + spacing as i32;
-        }
-
-        let mut sub_bottom_y = 0;
-        if let Some(img) = scaled_sub {
-            let y = row_center_y - (img.height() as i32 / 2);
-            imageops::overlay(&mut canvas, &img, current_x as i64, y as i64);
-            sub_bottom_y = y + img.height() as i32;
-            current_x += img.width() as i32 + spacing as i32;
-        }
-
-        if let Some(img) = text_img {
-            let base_y = if sub_bottom_y > 0 {
-                sub_bottom_y - img.height() as i32
-            } else {
-                row_center_y - (img.height() as i32 / 2)
-            };
-
-            let extra_offset = (border_size as f32 * cfg.model_text_y_shift_ratio) as i32;
-            let final_y = base_y + extra_offset;
-
-            let x = current_x - 10; 
-            imageops::overlay(&mut canvas, &img, x as i64, final_y as i64);
         }
     }
 
-    // 6. 绘制第二行：拍摄参数
-    if !shooting_params.is_empty() {
-        let text_w = graphics::measure_text_width(font, shooting_params, scale_params);
-        let text_x = ((canvas_w as i32 - text_w as i32) / 2).max(0);
-        let sub_weight = if font_weight == "ExtraBold" { "Bold" } else { font_weight };
-        graphics::draw_text_high_quality(&mut canvas, sub_text_color, text_x, line2_y, scale_params, font, shooting_params, sub_weight);
+    // --- 第二行 ---
+    if params_w > 0 {
+        let line2_x = (canvas_w - params_w) / 2;
+        let line2_y = block_start_y + line1_height + gap_lines;
+        
+        // 🟢 2. 直接使用 draw_text_mut
+        draw_text_mut(
+            &mut canvas, 
+            cfg.text_color_params, 
+            line2_x as i32, 
+            line2_y as i32, 
+            scale_params, 
+            font, 
+            input.params
+        );
     }
 
-    println!("  - [PERF] 高斯模糊模式-绘制阶段总耗时: {:.2?}", t0.elapsed());
+    println!("  - [PERF] Blur Total Time: {:.2?}", t0.elapsed());
     DynamicImage::ImageRgba8(canvas)
 }

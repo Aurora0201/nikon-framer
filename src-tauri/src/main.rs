@@ -9,6 +9,8 @@ mod models;
 mod state;
 mod setup;
 mod commands;
+mod parser;
+
 
 use std::sync::Arc;
 use state::AppState;
@@ -34,7 +36,7 @@ fn main() {
             commands::common::check_file_exif,
             // 其他遗留命令
             metadata::filter_files,
-            metadata::scan_folder
+            metadata::scan_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

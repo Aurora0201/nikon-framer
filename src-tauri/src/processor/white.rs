@@ -1,239 +1,372 @@
 use image::{DynamicImage, ImageBuffer, Rgba, imageops, GenericImageView};
 use ab_glyph::{FontRef, PxScale};
-use std::time::Instant;
+use imageproc::drawing::{draw_text_mut, text_size, draw_filled_rect_mut};
+use imageproc::rect::Rect;
 use std::sync::Arc;
+use std::cmp::min;
+use std::time::Instant;
 
-use crate::graphics;
-// 引入父模块公共工具
-use super::{DrawContext, clean_model_name, resize_image_by_height};
+// 引入父模块通用工具
+use super::resize_image_by_height; 
 
-// 🟢 [关键修改] 定义白底模板所需的资源槽位
-// 模板只关心"位置"，不关心"内容"
+// ==========================================
+// 1. 资源定义
+// ==========================================
 pub struct WhiteStyleResources {
-    // 对应主Logo位置 (如 "Nikon", "Sony")
-    pub main_logo: Option<Arc<DynamicImage>>, 
-    
-    // 对应副Logo位置 (如 "Z", "Alpha")
-    pub sub_logo:  Option<Arc<DynamicImage>>, 
-    
-    // 对应左侧装饰图标位置 (如 "Yellow Box", "Red Dot")
-    pub badge_icon: Option<Arc<DynamicImage>>, 
+    pub logo: Option<Arc<DynamicImage>>, 
 }
 
-/// 布局配置：集中管理所有"魔数"
+// ==========================================
+// 2. 布局配置
+// ==========================================
 struct LayoutConfig {
-    bottom_ratio: f32,      // 底部白条高度占原图高度的比例
+    bar_ratio_landscape: f32, 
+    bar_ratio_portrait: f32,  
     
-    scale_model_text: f32,  // 机型文字大小
-    scale_params_text: f32, // 参数文字大小
-    scale_logo_main: f32,   // 主Logo大小 (原 word)
-    scale_logo_sub: f32,    // 副Logo大小 (原 z)
+    land_side_margin_ratio: f32,
+    port_side_margin_ratio: f32, 
     
-    gap_icon_text: f32,     // 左侧图标和文字的间距
-    margin_left: f32,       // 左边距
-    line_gap: f32,          // 两行文字之间的间距
+    // --- 横构图 ---
+    land_font_scale_model: f32,  
+    land_font_scale_params: f32, 
+    land_icon_scale: f32,
+
+    // --- 竖构图 ---
+    port_font_scale_model: f32,   
+    port_font_scale_params: f32,  
+    port_icon_scale: f32,         
     
-    skew_padding_fix: i32,  // 斜体文字的左侧修正
+    // 间距配置
+    element_gap_ratio: f32,       
+    line_width_ratio: f32,        
+    portrait_line_gap_ratio: f32, 
+    portrait_line_height_scale: f32, 
+
+    // 偏移微调
+    offset_y_left_ratio: f32,
+    offset_y_right_ratio: f32,
     
-    // 机型文字(如"50")的垂直偏移比例
-    model_text_y_offset_ratio: f32, 
+    // 🟢 竖构图文字块垂直偏移 (修正视觉重心)
+    portrait_text_offset_y_ratio: f32,
 }
 
 impl LayoutConfig {
-    fn default_config() -> Self {
+    fn default() -> Self {
         Self {
-            bottom_ratio: 0.14,
+            bar_ratio_landscape: 0.12, 
+            bar_ratio_portrait: 0.13,  
             
-            scale_model_text: 0.95,
-            scale_params_text: 0.22,
-            scale_logo_main: 1.15, // 原 word scale
-            scale_logo_sub: 0.9,   // 原 z scale
+            land_side_margin_ratio: 0.5,
+            port_side_margin_ratio: 0.35,
             
-            gap_icon_text: 0.25,
-            margin_left: 0.4,
-            line_gap: 0.1,
-            skew_padding_fix: -10,
+            // --- 横构图 ---
+            land_font_scale_model: 0.38,
+            land_font_scale_params: 0.31,
+            land_icon_scale: 0.52,
+
+            // --- 竖构图 ---
+            port_icon_scale: 0.38,         
+            port_font_scale_model: 0.30,   
+            port_font_scale_params: 0.25,  
+
+            // 通用
+            element_gap_ratio: 0.30,  
+            line_width_ratio: 0.025, // 竖线较粗
             
-            // 0.25 表示向下微调，使底部视觉更平衡
-            model_text_y_offset_ratio: 0.25, 
+            offset_y_left_ratio: -0.05, 
+            offset_y_right_ratio: -0.05,
+            
+            portrait_line_gap_ratio: 0.15, 
+            portrait_line_height_scale: 1.3, // 竖线较长
+
+            // 🟢 仅针对文字块向上微调 (负值向上)
+            // 建议稍微加大一点点，因为只有文字在动
+            portrait_text_offset_y_ratio: -0.02,
         }
     }
 }
 
-struct LayoutMetrics {
-    bottom_height: u32,
-    base_h: f32,
-    margin_left: i32,
-    gap_icon_text: i32,
-    line_gap: i32,
-    bar_center_y: i32,
-    line1_height: f32,
-    line1_y: i32,
+// ==========================================
+// 3. 计算结果 (Metrics)
+// ==========================================
+struct Metrics {
+    bar_height: u32,
+    land_padding_x: i32, 
+    port_padding_x: i32,
+
+    center_y: i32, // 几何中心
+    
+    gap: i32,
+    line_w: u32,
+    line_h_land: u32, 
+    
+    offset_y_left: i32,
+    offset_y_right: i32,
+    
+    portrait_line_gap: i32,
+    portrait_text_offset_y: i32, // 🟢 文字块的像素偏移量
 }
 
-fn calculate_metrics(img_height: u32, config: &LayoutConfig) -> LayoutMetrics {
-    let bottom_height = (img_height as f32 * config.bottom_ratio) as u32;
-    // base_h 是计算文字大小的基准单位
-    let base_h = bottom_height as f32 * 0.25; 
-
-    // 使用主Logo的比例来定行高
-    let line1_height = base_h * config.scale_logo_main;
-    let font_size_params = bottom_height as f32 * config.scale_params_text;
-    let line_gap = (bottom_height as f32 * config.line_gap) as i32;
-    let total_block_h = line1_height + line_gap as f32 + font_size_params;
+fn calculate_metrics(w: u32, h: u32, cfg: &LayoutConfig) -> Metrics {
+    let short_edge = min(w, h) as f32;
     
-    // 文字块整体垂直居中于白条
-    let bar_center_y = img_height as f32 + bottom_height as f32 / 2.0;
-    let text_block_start_y = bar_center_y - (total_block_h / 2.0);
+    let is_landscape = w >= h;
+    let target_ratio = if is_landscape {
+        cfg.bar_ratio_landscape
+    } else {
+        cfg.bar_ratio_portrait
+    };
+    
+    let bar_height = (short_edge * target_ratio) as u32;
+    let center_y = (h as f32 + bar_height as f32 / 2.0) as i32;
 
-    LayoutMetrics {
-        bottom_height,
-        base_h,
-        margin_left: (bottom_height as f32 * config.margin_left) as i32,
-        gap_icon_text: (bottom_height as f32 * config.gap_icon_text) as i32,
-        line_gap,
-        bar_center_y: bar_center_y as i32,
-        line1_height,
-        line1_y: text_block_start_y.round() as i32,
+    Metrics {
+        bar_height,
+        land_padding_x: (bar_height as f32 * cfg.land_side_margin_ratio) as i32,
+        port_padding_x: (bar_height as f32 * cfg.port_side_margin_ratio) as i32,
+
+        center_y,
+        
+        gap: (bar_height as f32 * cfg.element_gap_ratio) as i32,
+        line_w: (bar_height as f32 * cfg.line_width_ratio).max(1.0) as u32,
+        
+        line_h_land: (bar_height as f32 * 0.55) as u32, 
+
+        offset_y_left: (bar_height as f32 * cfg.offset_y_left_ratio) as i32,
+        offset_y_right: (bar_height as f32 * cfg.offset_y_right_ratio) as i32,
+        
+        portrait_line_gap: (bar_height as f32 * cfg.portrait_line_gap_ratio) as i32,
+        
+        // 🟢 计算竖构图文字块偏移
+        portrait_text_offset_y: (bar_height as f32 * cfg.portrait_text_offset_y_ratio) as i32,
     }
 }
 
-// 绘图逻辑：左侧装饰图标 (Badge Icon)
-fn draw_left_icon(ctx: &mut DrawContext, icon: &DynamicImage, metrics: &LayoutMetrics) -> i32 {
-    let max_h = (metrics.bottom_height as f32 * 0.65) as u32;
-    let scaled_icon = resize_image_by_height(icon, max_h);
-    // 垂直居中于白条区域
-    let icon_y = metrics.bar_center_y - (scaled_icon.height() as i32 / 2);
-    let icon_x = metrics.margin_left;
-    imageops::overlay(ctx.canvas, &scaled_icon, icon_x as i64, icon_y as i64);
+// ==========================================
+// 辅助：横构图测量
+// ==========================================
+fn measure_right_width_land(
+    font: &FontRef,
+    params: &str,
+    assets: &WhiteStyleResources,
+    metrics: &Metrics,
+    cfg: &LayoutConfig
+) -> u32 {
+    let mut total_width = 0;
+    let icon_h = (metrics.bar_height as f32 * cfg.land_icon_scale) as u32;
     
-    icon_x + scaled_icon.width() as i32 + metrics.gap_icon_text
+    if let Some(logo) = &assets.logo {
+        let (lw, lh) = logo.dimensions();
+        let aspect_ratio = lw as f32 / lh as f32;
+        let target_h = if aspect_ratio > 1.5 { (icon_h as f32 * 0.65) as u32 } else { icon_h };
+        let target_w = (target_h as f32 * aspect_ratio) as u32;
+        total_width += target_w;
+    }
+    if !params.is_empty() {
+        total_width += metrics.gap as u32; 
+        total_width += metrics.line_w;     
+        total_width += metrics.gap as u32; 
+    }
+    if !params.is_empty() {
+        let font_size = metrics.bar_height as f32 * cfg.land_font_scale_params; 
+        let scale = PxScale::from(font_size);
+        let (w, _h) = text_size(scale, font, params);
+        total_width += w as u32;
+    }
+    total_width + metrics.land_padding_x as u32
 }
 
-// 绘图逻辑：主行 (Main Logo + Sub Logo + Model Text)
-fn draw_main_line_elements(
-    ctx: &mut DrawContext,
-    start_x: i32,
-    assets: &WhiteStyleResources, // 🟢 改为接收通用资源包
-    camera_make: &str,
-    camera_model: &str,
-    metrics: &LayoutMetrics,
-    config: &LayoutConfig
+// ==========================================
+// 4. 绘图实现 (横构图)
+// ==========================================
+fn draw_left_section_landscape(
+    canvas: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
+    font: &FontRef,
+    text: &str,
+    metrics: &Metrics,
+    cfg: &LayoutConfig,
+    max_width: u32,
 ) {
-    let mut current_x = start_x;
-    let line1_y = metrics.line1_y;
-
-    // 1. 绘制主Logo (Main Logo / Wordmark)
-    if let Some(main_img) = &assets.main_logo {
-        let target_h = (metrics.base_h as f32 * config.scale_logo_main) as u32;
-        // 注意：main_img 是 Arc<DynamicImage>，可以直接解引用传给需要 &DynamicImage 的函数
-        let scaled_word = resize_image_by_height(main_img, target_h);
-        
-        // 垂直居中于第一行高度内
-        let word_y = line1_y + ((metrics.line1_height as i32 - scaled_word.height() as i32) / 2);
-        imageops::overlay(ctx.canvas, &scaled_word, current_x as i64, word_y as i64);
-        current_x += scaled_word.width() as i32 + (metrics.base_h as f32 * 0.3) as i32;
-    }
-
-    // 2. 绘制副Logo (Sub Logo / Series Symbol)
-    let mut sub_bottom_y = line1_y + metrics.line1_height as i32; 
-    if let Some(sub_img) = &assets.sub_logo {
-        let target_h = (metrics.base_h as f32 * config.scale_logo_sub) as u32;
-        let scaled_sub = resize_image_by_height(sub_img, target_h);
-        
-        let sub_y = line1_y + ((metrics.line1_height as i32 - scaled_sub.height() as i32) / 2);
-        imageops::overlay(ctx.canvas, &scaled_sub, current_x as i64, sub_y as i64);
-        
-        // 记录副Logo的底部位置，作为后续对齐基准
-        sub_bottom_y = sub_y + scaled_sub.height() as i32;
-        current_x += scaled_sub.width() as i32 + (metrics.base_h as f32 * 0.15) as i32;
-    }
-
-    // 3. 绘制机型文字 (Model Number)
-    if !camera_model.is_empty() {
-        let model_text = clean_model_name(camera_make, camera_model);
-        let text_size = metrics.base_h as f32 * config.scale_model_text;
-        
-        // 生成斜体文字 (黑色)
-        let italic_img = graphics::generate_skewed_text_high_quality(
-            &model_text, ctx.font, PxScale::from(text_size), Rgba([0, 0, 0, 255]), 0.23
-        );
-
-        // 计算基础位置：
-        // 如果有副Logo，则与副Logo底部对齐；否则与主Logo(第一行)垂直居中
-        let align_bottom_y = if assets.sub_logo.is_some() {
-            sub_bottom_y - italic_img.height() as i32
-        } else {
-            // 如果没有副Logo，回退到垂直居中逻辑 (比如 Canon 只有主标)
-            let row_center = line1_y + (metrics.line1_height as i32 / 2);
-            row_center + (italic_img.height() as i32 / 2) // 粗略估算底部
-        };
-        
-        // 应用垂直偏移
-        let offset = (metrics.base_h * config.model_text_y_offset_ratio) as i32;
-        
-        let draw_y = align_bottom_y + offset;
-        let draw_x = current_x + config.skew_padding_fix;
-        
-        imageops::overlay(ctx.canvas, &italic_img, draw_x as i64, draw_y as i64);
-    }
-}
-
-fn draw_params_line(ctx: &mut DrawContext, start_x: i32, params: &str, metrics: &LayoutMetrics, config: &LayoutConfig) {
-    if params.is_empty() { return; }
-    let line2_y = metrics.line1_y + metrics.line1_height as i32 + metrics.line_gap;
-    let sub_weight = if ctx.font_weight == "ExtraBold" { "Bold" } else { ctx.font_weight };
-    let font_size = metrics.bottom_height as f32 * config.scale_params_text;
+    if text.is_empty() { return; }
+    let default_font_size = metrics.bar_height as f32 * cfg.land_font_scale_model;
+    let mut scale = PxScale::from(default_font_size);
+    let text_h;
     
-    // 参数行文字颜色 (灰色)
-    graphics::draw_text_high_quality(
-        ctx.canvas, Rgba([100, 100, 100, 255]), start_x, line2_y, 
-        PxScale::from(font_size), ctx.font, params, sub_weight
-    );
+    loop {
+        let size = text_size(scale, font, text);
+        if size.0 as u32 <= max_width || scale.x < 10.0 {
+            text_h = size.1;
+            break;
+        }
+        scale = PxScale::from(scale.x * 0.95);
+    }
+    
+    let text_y = metrics.center_y - (text_h as i32 / 2) + metrics.offset_y_left;
+    draw_text_mut(canvas, Rgba([0, 0, 0, 255]), metrics.land_padding_x, text_y, scale, font, text);
 }
 
-// =========================================================
-// 🟢 主处理函数
-// =========================================================
+fn draw_right_section_landscape(
+    canvas: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
+    font: &FontRef,
+    params: &str,
+    assets: &WhiteStyleResources,
+    width: u32,
+    metrics: &Metrics,
+    cfg: &LayoutConfig
+) {
+    let right_edge = width as i32 - metrics.land_padding_x;
+    let mut cursor_x = right_edge;
+
+    let font_size = metrics.bar_height as f32 * cfg.land_font_scale_params;
+    let icon_h = (metrics.bar_height as f32 * cfg.land_icon_scale) as u32;
+
+    if !params.is_empty() {
+        let scale = PxScale::from(font_size);
+        let (w, h) = text_size(scale, font, params);
+        let y = (metrics.center_y + metrics.offset_y_right) - (h as i32 / 2);
+        let x = cursor_x - w as i32;
+        draw_text_mut(canvas, Rgba([60, 60, 60, 255]), x, y, scale, font, params);
+        cursor_x = x - metrics.gap;
+    }
+    if !params.is_empty() {
+        let x = cursor_x - metrics.line_w as i32;
+        let y = metrics.center_y - (metrics.line_h_land as i32 / 2);
+        let rect = Rect::at(x, y).of_size(metrics.line_w, metrics.line_h_land);
+        draw_filled_rect_mut(canvas, rect, Rgba([160, 160, 160, 255]));
+        cursor_x = x - metrics.gap;
+    }
+    if let Some(logo) = &assets.logo {
+        let (lw, lh) = logo.dimensions();
+        let aspect_ratio = lw as f32 / lh as f32;
+        let target_h = if aspect_ratio > 1.5 { (icon_h as f32 * 0.65) as u32 } else { icon_h };
+        let scaled_logo = resize_image_by_height(logo, target_h);
+        let y = metrics.center_y - (scaled_logo.height() as i32 / 2);
+        let x = cursor_x - scaled_logo.width() as i32;
+        imageops::overlay(canvas, &scaled_logo, x as i64, y as i64);
+    }
+}
+
+// ==========================================
+// 🟢 竖构图专用布局 (Logo | Line | StackedText)
+// ==========================================
+fn draw_portrait_layout(
+    canvas: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
+    font: &FontRef,
+    text_model: &str,
+    text_params: &str,
+    assets: &WhiteStyleResources,
+    metrics: &Metrics,
+    cfg: &LayoutConfig
+) {
+    // 1. 准备字体 & 尺寸
+    let scale_model = PxScale::from(metrics.bar_height as f32 * cfg.port_font_scale_model);
+    let scale_params = PxScale::from(metrics.bar_height as f32 * cfg.port_font_scale_params);
+    let icon_h_port = (metrics.bar_height as f32 * cfg.port_icon_scale) as u32;
+
+    // 2. 测量文字块
+    let (_, h_model) = text_size(scale_model, font, text_model);
+    let (_, h_params) = text_size(scale_params, font, text_params);
+    let text_block_h = h_model as i32 + metrics.portrait_line_gap + h_params as i32;
+
+    // 3. 测量 Logo (用于决定竖线高度)
+    let mut logo_draw_h = 0;
+    let mut scaled_logo_opt = None;
+    if let Some(logo) = &assets.logo {
+        let (lw, lh) = logo.dimensions();
+        let aspect_ratio = lw as f32 / lh as f32;
+        let mut target_h = icon_h_port;
+        if aspect_ratio > 1.5 {
+            target_h = (icon_h_port as f32 * 0.65) as u32;
+        }
+        let scaled = resize_image_by_height(logo, target_h);
+        logo_draw_h = scaled.height() as i32;
+        scaled_logo_opt = Some(scaled);
+    }
+
+    // 4. 决定竖线高度 (明显长于内容)
+    let content_max_h = std::cmp::max(logo_draw_h, text_block_h);
+    let line_height = (content_max_h as f32 * cfg.portrait_line_height_scale) as u32;
+
+    // 5. 坐标计算
+    let start_x = metrics.port_padding_x;
+    let mut cursor_x = start_x;
+
+    // 🟢 区分中心点
+    // A. 几何中心 (用于 Logo 和 Line) -> 严格垂直居中
+    let geom_center_y = metrics.center_y;
+    
+    // B. 视觉中心 (用于文字块) -> 包含微调偏移
+    let text_visual_center_y = metrics.center_y + metrics.portrait_text_offset_y;
+
+    // --- A. 绘制 Logo (几何居中) ---
+    if let Some(scaled) = scaled_logo_opt {
+        let y = geom_center_y - (scaled.height() as i32 / 2);
+        imageops::overlay(canvas, &scaled, cursor_x as i64, y as i64);
+        cursor_x += scaled.width() as i32 + metrics.gap;
+    }
+
+    // --- B. 绘制竖线 (几何居中) ---
+    if assets.logo.is_some() {
+        let y = geom_center_y - (line_height as i32 / 2);
+        let rect = Rect::at(cursor_x, y).of_size(metrics.line_w, line_height);
+        draw_filled_rect_mut(canvas, rect, Rgba([160, 160, 160, 255]));
+        cursor_x += metrics.line_w as i32 + metrics.gap;
+    }
+
+    // --- C. 绘制文字块 (视觉微调居中) ---
+    // 计算文字块相对于 visual_center_y 的起始点
+    let text_block_start_y = text_visual_center_y - (text_block_h / 2);
+    
+    // Line 1: Model
+    draw_text_mut(canvas, Rgba([0, 0, 0, 255]), cursor_x, text_block_start_y, scale_model, font, text_model);
+
+    // Line 2: Params
+    let params_y = text_block_start_y + h_model as i32 + metrics.portrait_line_gap;
+    draw_text_mut(canvas, Rgba([60, 60, 60, 255]), cursor_x, params_y, scale_params, font, text_params);
+}
+
+// ==========================================
+// 5. 主入口
+// ==========================================
 pub fn process(
     img: &DynamicImage,
     camera_make: &str,
     camera_model: &str,
-    shooting_params: &str,
+    params: &str,
     font: &FontRef,
-    font_weight: &str,
-    assets: &WhiteStyleResources // 🟢 接收通用的资源包
+    assets: &WhiteStyleResources
 ) -> DynamicImage {
     let t0 = Instant::now();
-    let (width, height) = img.dimensions();
+    let (w, h) = (img.width(), img.height());
+
+    let cfg = LayoutConfig::default();
+    let metrics = calculate_metrics(w, h, &cfg);
     
-    let config = LayoutConfig::default_config();
-    let metrics = calculate_metrics(height, &config);
-    let new_height = height + metrics.bottom_height;
+    let new_h = h + metrics.bar_height;
+    let mut canvas = ImageBuffer::from_pixel(w, new_h, Rgba([255, 255, 255, 255]));
     
-    // 1. 创建白底画布
-    let mut canvas = ImageBuffer::from_pixel(width, new_height, Rgba([255, 255, 255, 255]));
-    
-    // 2. 贴入原图
     imageops::overlay(&mut canvas, img, 0, 0);
 
-    // 构造绘图上下文
-    let mut ctx = DrawContext { canvas: &mut canvas, font, font_weight };
+    let text_model = format!("{} {}", camera_make, camera_model).to_uppercase();
 
-    // 3. 绘制底部信息
-    let mut content_start_x = metrics.margin_left;
-    
-    // 🟢 如果有装饰图标 (Badge Icon)，先画它
-    if let Some(icon) = &assets.badge_icon {
-        content_start_x = draw_left_icon(&mut ctx, icon, &metrics);
+    if w >= h {
+        // === 横构图 ===
+        let right_width = measure_right_width_land(font, params, assets, &metrics, &cfg);
+        let safe_gap = 50; 
+        let max_left_width = if w > (right_width + metrics.land_padding_x as u32 + safe_gap) {
+            w - right_width - metrics.land_padding_x as u32 - safe_gap
+        } else {
+            100 
+        };
+        draw_left_section_landscape(&mut canvas, font, &text_model, &metrics, &cfg, max_left_width);
+        draw_right_section_landscape(&mut canvas, font, params, assets, w, &metrics, &cfg);
+        println!("  - [PERF] White Layout: Landscape");
+    } else {
+        // === 竖构图 ===
+        draw_portrait_layout(&mut canvas, font, &text_model, params, assets, &metrics, &cfg);
+        println!("  - [PERF] White Layout: Portrait (Logo & Line Centered | Text Offset)");
     }
 
-    // 🟢 绘制主行 (传入通用资源包)
-    draw_main_line_elements(&mut ctx, content_start_x, assets, camera_make, camera_model, &metrics, &config);
-    
-    // 绘制参数行
-    draw_params_line(&mut ctx, content_start_x, shooting_params, &metrics, &config);
-
-    println!("  - [PERF] 白底模式-绘制阶段总耗时: {:.2?}", t0.elapsed());
+    println!("  - [PERF] Total Time: {:.2?}", t0.elapsed());
     DynamicImage::ImageRgba8(canvas)
 }

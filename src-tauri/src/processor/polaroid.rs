@@ -1,72 +1,81 @@
-use image::{DynamicImage, Rgba, RgbaImage, imageops, GenericImageView}; // 必须引入 GenericImageView 才能用 .dimensions()
+use image::{DynamicImage, Rgba, RgbaImage, imageops, GenericImageView}; 
 use ab_glyph::{FontRef, PxScale};
+// 🟢 1. 引入标准绘图函数 draw_text_mut
+use imageproc::drawing::{text_size, draw_text_mut}; 
 use std::sync::Arc;
 use std::time::Instant;
+use std::cmp::min;
 
-// 假设 graphics 模块包含基础绘图能力 (如 draw_text_high_quality)
-// 如果 graphics 也不想依赖，可以将绘图逻辑也搬过来，但通常保留 shared graphics 是合理的
-use crate::graphics; 
+// 复用父模块的通用工具 (resize_image_by_height)
+use super::resize_image_by_height;
 
-/// ----------------------------------------------------------------------------
-/// 1. 专属资源定义 (解耦，不依赖 BlurStyleResources)
-/// ----------------------------------------------------------------------------
-/// 专门用于 Polaroid 模式的资源容器
+// ==========================================
+// 1. 数据结构
+// ==========================================
+
 pub struct PolaroidResources {
-    /// 厂商 Logo (通常是黑色的 Nikon/Sony 等)
     pub logo: Option<Arc<DynamicImage>>,
 }
 
-/// ----------------------------------------------------------------------------
-/// 2. 布局配置结构体
-/// ----------------------------------------------------------------------------
+pub struct PolaroidInput<'a> {
+    pub brand: &'a str,
+    pub model: &'a str,
+    pub params: &'a str,
+}
+
+// ==========================================
+// 2. 布局配置
+// ==========================================
 pub struct PolaroidConfig {
-    pub side_border_ratio: f32,      // 侧边框比例
-    pub bottom_height_multiplier: f32, // 底部留白倍数
-    pub font_size_ratio: f32,        // 字体大小比例
-    pub logo_height_ratio: f32,      // Logo高度比例
-    pub line_gap_ratio: f32,         // 行间距
-    pub content_vertical_bias: f32,  // 垂直偏移修正
+    pub side_border_ratio: f32,      
+    pub bottom_height_multiplier: f32, 
+    
+    pub font_scale: f32,             
+    pub logo_height_ratio: f32,      
+    
+    pub line_gap_ratio: f32,         
+    pub content_vertical_bias: f32,  
+    
+    pub text_color: Rgba<u8>,        
+    pub bg_color: Rgba<u8>,          
 }
 
 impl Default for PolaroidConfig {
     fn default() -> Self {
         Self {
             side_border_ratio: 0.05,
-            bottom_height_multiplier: 4.5,
+            bottom_height_multiplier: 4.5, 
 
-            font_size_ratio: 0.8,
-            logo_height_ratio: 1.0,
+            font_scale: 0.8,               
+            logo_height_ratio: 1.0,        
 
-            line_gap_ratio: 0.5,
-            content_vertical_bias: 0.0,
+            line_gap_ratio: 0.6,           
+            content_vertical_bias: 0.0,   
+
+            text_color: Rgba([20, 20, 20, 255]), 
+            bg_color: Rgba([255, 255, 255, 255]),
         }
     }
 }
 
-/// ----------------------------------------------------------------------------
-/// 3. 核心处理函数
-/// ----------------------------------------------------------------------------
-pub fn process_polaroid_style(
+// ==========================================
+// 3. 核心处理函数
+// ==========================================
+pub fn process(
     img: &DynamicImage,
-    _camera_make: &str, 
-    _camera_model: &str,
-    shooting_params: &str,
     font: &FontRef,
-    font_weight: &str,
-    assets: &PolaroidResources, // 使用专属结构体
+    input: PolaroidInput, 
+    assets: &PolaroidResources,
 ) -> DynamicImage {
     let cfg = PolaroidConfig::default();
     let t0 = Instant::now();
 
-    // 修复报错关键点：引入 GenericImageView 后，这里就能正常获取 dimensions 了
     let (width, height) = img.dimensions();
 
     // -------------------------------------------------------------
     // A. 计算几何尺寸
     // -------------------------------------------------------------
-    // 视觉一致性核心：使用短边作为基准
-    let base_size = width.min(height) as f32;
-
+    let base_size = min(width, height) as f32;
     let border_size = (base_size * cfg.side_border_ratio).round() as u32;
     let bottom_area_h = (border_size as f32 * cfg.bottom_height_multiplier).round() as u32;
 
@@ -76,87 +85,88 @@ pub fn process_polaroid_style(
     // -------------------------------------------------------------
     // B. 创建画布并合成
     // -------------------------------------------------------------
-    let mut canvas = RgbaImage::from_pixel(canvas_w, canvas_h, Rgba([255, 255, 255, 255]));
+    let mut canvas = RgbaImage::from_pixel(canvas_w, canvas_h, cfg.bg_color);
     imageops::overlay(&mut canvas, img, border_size as i64, border_size as i64);
 
     // -------------------------------------------------------------
-    // C. 底部排版
+    // C. 底部内容排版
     // -------------------------------------------------------------
-    let footer_start_y = border_size + height;
-    let footer_h = bottom_area_h;
-
-    let font_size = border_size as f32 * cfg.font_size_ratio;
-    let font_scale = PxScale::from(font_size);
-    let text_color = Rgba([0, 0, 0, 255]); 
-    let sub_weight = if font_weight == "ExtraBold" { "Bold" } else { font_weight };
-
-    // --- C1. 准备 Logo ---
-    let logo_target_h = (border_size as f32 * cfg.logo_height_ratio) as u32;
-    let mut logo_sprite = None;
+    let font_size = border_size as f32 * cfg.font_scale;
+    let scale = PxScale::from(font_size);
+    
+    // C1. 准备 Logo
+    let mut logo_draw_w = 0;
+    let mut logo_draw_h = 0;
+    let mut scaled_logo = None;
 
     if let Some(src_logo) = &assets.logo {
-        // 使用本文件下方的私有辅助函数，不再依赖外部 graphics 里的 resize
-        logo_sprite = Some(resize_by_height(src_logo, logo_target_h));
-    }
-
-    // --- C2. 计算垂直布局堆叠高度 ---
-    let mut content_block_h = 0.0;
-    let gap = font_size * cfg.line_gap_ratio;
-    let has_text = !shooting_params.is_empty();
-
-    if let Some(l) = &logo_sprite {
-        content_block_h += l.height() as f32;
-    }
-    if logo_sprite.is_some() && has_text {
-        content_block_h += gap;
-    }
-    if has_text {
-        content_block_h += font_size; // 估算高度
-    }
-
-    // --- C3. 确定绘制起始 Y ---
-    let footer_center_y = footer_start_y as f32 + (footer_h as f32 / 2.0);
-    let bias_pixel = footer_h as f32 * cfg.content_vertical_bias;
-    let mut current_draw_y = (footer_center_y - (content_block_h / 2.0) + bias_pixel).round() as i64;
-    let canvas_center_x = canvas_w as i64 / 2;
-
-    // --- D. 绘制 ---
-    
-    // 绘制 Logo
-    if let Some(logo) = logo_sprite {
-        let logo_x = canvas_center_x - (logo.width() as i64 / 2);
-        imageops::overlay(&mut canvas, &logo, logo_x, current_draw_y);
-        current_draw_y += logo.height() as i64 + gap as i64;
-    }
-
-    // 绘制文字
-    if has_text {
-        // 假设 graphics 模块里有 measure_text_width 和 draw_text_high_quality
-        // 这两个是通用基础功能，通常建议保留在 graphics 模块中
-        let text_width = graphics::measure_text_width(font, shooting_params, font_scale);
-        let text_x = (canvas_w as i32 - text_width as i32) / 2;
+        let target_h = (border_size as f32 * cfg.logo_height_ratio) as u32;
+        let resized = resize_image_by_height(src_logo, target_h);
         
-        graphics::draw_text_high_quality(
+        logo_draw_w = resized.width();
+        logo_draw_h = resized.height();
+        scaled_logo = Some(resized);
+    }
+
+    // C2. 准备文字
+    let has_text = !input.params.is_empty();
+    let (text_w, text_h) = if has_text {
+        let (w, h) = text_size(scale, font, input.params);
+        (w as u32, h as u32)
+    } else {
+        (0, 0)
+    };
+
+    // C3. 计算总高度
+    let gap = font_size * cfg.line_gap_ratio;
+    let mut total_content_h = 0.0;
+
+    if logo_draw_h > 0 {
+        total_content_h += logo_draw_h as f32;
+    }
+    if logo_draw_h > 0 && has_text {
+        total_content_h += gap;
+    }
+    if has_text {
+        total_content_h += text_h as f32;
+    }
+
+    // C4. 计算绘制起始点
+    let footer_start_y = border_size + height;
+    let footer_center_y = footer_start_y as f32 + (bottom_area_h as f32 / 2.0);
+    
+    let start_y = footer_center_y - (total_content_h / 2.0) + (bottom_area_h as f32 * cfg.content_vertical_bias);
+    let mut cursor_y = start_y as i32;
+    let center_x = canvas_w as i32 / 2;
+
+    // -------------------------------------------------------------
+    // D. 绘制
+    // -------------------------------------------------------------
+
+    // 1. 绘制 Logo
+    if let Some(logo) = scaled_logo {
+        let logo_x = center_x - (logo_draw_w as i32 / 2);
+        imageops::overlay(&mut canvas, &logo, logo_x as i64, cursor_y as i64);
+        cursor_y += logo_draw_h as i32 + gap as i32;
+    }
+
+    // 2. 绘制文字
+    if has_text {
+        let text_x = center_x - (text_w as i32 / 2);
+        
+        // 🟢 2. 直接调用标准库函数
+        // 这里不再需要传 "Normal" 或 "Bold"，粗细完全由 `font` 变量决定的
+        draw_text_mut(
             &mut canvas,
-            text_color,
+            cfg.text_color,
             text_x,
-            current_draw_y as i32,
-            font_scale,
+            cursor_y,
+            scale,
             font,
-            shooting_params,
-            sub_weight
+            input.params
         );
     }
 
-    println!("  - [PERF] PolaroidWhite 模式生成耗时: {:.2?}", t0.elapsed());
+    println!("  - [PERF] Polaroid Process: {:.2?}", t0.elapsed());
     DynamicImage::ImageRgba8(canvas)
-}
-
-/// ----------------------------------------------------------------------------
-/// 私有辅助函数：按高度缩放图片
-/// ----------------------------------------------------------------------------
-fn resize_by_height(img: &DynamicImage, target_height: u32) -> DynamicImage {
-    // 使用 Triangle 滤镜，速度和质量的平衡
-    // 传入 u32::MAX 作为宽度，image 库会自动保持纵横比
-    img.resize(u32::MAX, target_height, imageops::FilterType::Triangle)
 }

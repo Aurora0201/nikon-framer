@@ -2,12 +2,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
 use image::{DynamicImage};
+use std::fmt; // 引入格式化库
 
 // =========================================================
 // 🟢 Logo 资源管理系统 (Brand & Logo Assets)
 // =========================================================
 
 // 1. 品牌枚举
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Brand {
     Nikon,
@@ -16,7 +18,26 @@ pub enum Brand {
     Fujifilm,
     Leica,
     Hasselblad,
+    Other
     // ...
+}
+
+// 🟢 核心：实现 Display 特征
+impl fmt::Display for Brand {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // 这里定义你希望转换成的字符串样子
+        // 通常建议用首字母大写的标准写法
+        let s = match self {
+            Brand::Nikon => "Nikon",
+            Brand::Sony => "Sony",
+            Brand::Canon => "Canon",
+            Brand::Fujifilm => "Fujifilm",
+            Brand::Leica => "Leica",
+            Brand::Hasselblad => "Hasselblad",
+            Brand::Other => "Unkonwn", // 或者是 "Unknown"
+        };
+        write!(f, "{}", s)
+    }
 }
 
 // 2. Logo 具体描述符
@@ -57,12 +78,12 @@ impl LogoKey {
     fn load_data(&self) -> Option<&'static [u8]> {
         match (self.brand, self.l_type) {
             // === Nikon ===
-            (Brand::Nikon, LogoType::Wordmark)      => Some(include_bytes!("../../assets/logos/Nikon-word.png")),
-            (Brand::Nikon, LogoType::SymbolZ)       => Some(include_bytes!("../../assets/logos/Z.png")),
-            (Brand::Nikon, LogoType::IconYellowBox) => Some(include_bytes!("../../assets/logos/Nikon.png")),
+            (Brand::Nikon, LogoType::Wordmark)      => Some(include_bytes!("../../assets/logos/nikon-wordmark.png")),
+            (Brand::Nikon, LogoType::SymbolZ)       => Some(include_bytes!("../../assets/logos/nikon-symbol-z.png")),
+            (Brand::Nikon, LogoType::IconYellowBox) => Some(include_bytes!("../../assets/logos/nikon-icon-yellow-box.png")),
 
             // === Sony (暂未添加文件，注释以防报错) ===
-            // (Brand::Sony, LogoType::Wordmark)    => Some(include_bytes!("../assets/logos/Sony.png")),
+            (Brand::Sony, LogoType::Wordmark)    => Some(include_bytes!("../../assets/logos/sony-wordmark.png")),
             // (Brand::Sony, LogoType::SymbolAlpha) => Some(include_bytes!("../assets/logos/Alpha.png")),
 
             // === Leica (暂未添加文件) ===
@@ -70,7 +91,7 @@ impl LogoKey {
             // (Brand::Leica, LogoType::IconRedDot) => Some(include_bytes!("../assets/logos/Leica-Red.png")),
 
             // === Canon (暂未添加文件) ===
-            // (Brand::Canon, LogoType::Wordmark)   => Some(include_bytes!("../assets/logos/Canon.png")),
+            (Brand::Canon, LogoType::Wordmark)   => Some(include_bytes!("../../assets/logos/canon-wordmark.png")),
 
             // 其他未定义的组合返回 None
             _ => None,
