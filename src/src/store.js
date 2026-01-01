@@ -8,6 +8,7 @@ const PRESET_CONFIGS = {
   ClassicWhite: [
     { id: 'WhiteClassic', name: 'Standard White', desc: '标准白底 / 简约风格', img: 'white_standard.jpg' },
     { id: 'WhitePolaroid', name: 'Polaroid White', desc: '宝丽来风格', img: 'polaroid_white.jpg' },
+    { id: 'WhiteMaster', name: 'Master White', desc: '大师风格', img: 'polaroid_white.jpg' },
   ],
   Transparent: [
     { id: 'TransparentMaster', name: 'Glass Blur', desc: '大师风格 / 模糊', img: 'transparent_standard.jpg' },
