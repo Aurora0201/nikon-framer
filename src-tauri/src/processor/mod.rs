@@ -17,7 +17,7 @@ use crate::resources::{self, Brand, FontFamily, FontWeight, LogoType};
 // 引入各个子模块的特定资源结构体
 use crate::processor::white::WhiteStyleResources;
 use crate::processor::blur::BlurStyleResources;
-use crate::processor::polaroid::PolaroidResources; // 2. 引入 PolaroidResources
+use crate::processor::polaroid::{PolaroidInput, PolaroidResources}; // 2. 引入 PolaroidResources
 use crate::processor::blur::BlurInput; // 🟢 引入新结构体
 use crate::processor::master::MasterInput;
 
@@ -162,18 +162,23 @@ impl FrameProcessor for PolaroidProcessor {
             .map_err(|_| "Polaroid模式: 字体解析失败")?;
 
         let assets = PolaroidResources {
+            // Polaroid 模式通常只需要 Wordmark (黑色文字Logo)
             logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
         };
         
         let params_str = ctx.params.format_standard();
 
-        Ok(polaroid::process_polaroid_style(
+        // 🟢 构造结构化输入
+        let input = PolaroidInput {
+            brand: &ctx.brand.to_string(),
+            model: &ctx.model_name,
+            params: &params_str,
+        };
+
+        Ok(polaroid::process(
             img, 
-            &ctx.brand.to_string(), 
-            &ctx.model_name, 
-            &params_str, 
             &font, 
-            "Regular", 
+            input, // 传入 input
             &assets
         ))
     }
@@ -214,7 +219,7 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
         // 现在正确初始化 PolaroidProcessor 并使用 InterDisplay-Regular
         StyleOptions::PolaroidWhite => {
             Box::new(PolaroidProcessor {
-                font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Regular),
+                font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Medium),
             })
         },
     }

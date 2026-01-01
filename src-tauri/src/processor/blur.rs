@@ -1,6 +1,7 @@
 use image::{DynamicImage, GenericImageView, Rgba, imageops};
 use ab_glyph::{FontRef, PxScale};
-use imageproc::drawing::text_size;
+// 🟢 1. 引入 draw_text_mut
+use imageproc::drawing::{text_size, draw_text_mut};
 use std::time::Instant;
 use std::sync::Arc;
 use std::cmp::min;
@@ -13,13 +14,10 @@ use super::resize_image_by_height;
 // 1. 数据结构定义
 // ==========================================
 
-/// 模糊模式资源包 (只包含一个通用 Logo)
 pub struct BlurStyleResources {
     pub logo: Option<Arc<DynamicImage>>, 
 }
 
-/// 文本输入参数包
-/// 接收来自 Parser 的干净数据
 pub struct BlurInput<'a> {
     pub brand: &'a str,
     pub model: &'a str,
@@ -30,27 +28,21 @@ pub struct BlurInput<'a> {
 // 2. 布局配置
 // ==========================================
 struct BlurConfig {
-    // --- 基础尺寸 ---
     border_ratio: f32,       
     bottom_extra_ratio: f32, 
 
-    // --- 背景特效 ---
     blur_sigma: f32,         
     bg_brightness: i32,      
     process_limit: u32,      
 
-    // --- 字体比例 ---
     font_scale_model: f32,   
     font_scale_params: f32,  
     
-    // --- Logo 比例 ---
     logo_height_ratio: f32,  
 
-    // --- 间距配置 ---
-    gap_logo_text_ratio: f32, // Logo与文字的间距
-    gap_lines_ratio: f32,     // 两行文字的垂直间距
+    gap_logo_text_ratio: f32, 
+    gap_lines_ratio: f32,     
     
-    // --- 颜色 ---
     text_color_model: Rgba<u8>,
     text_color_params: Rgba<u8>,
 }
@@ -71,9 +63,6 @@ impl Default for BlurConfig {
             logo_height_ratio: 0.85,   
             
             gap_logo_text_ratio: 0.6,  
-            
-            // 🟢 已调整：增大行距 (从 0.35 -> 0.60)
-            // 解决 "上下两行行距太近" 的问题
             gap_lines_ratio: 0.60,     
 
             text_color_model: Rgba([255, 255, 255, 255]),
@@ -88,7 +77,7 @@ impl Default for BlurConfig {
 pub fn process(
     img: &DynamicImage,
     font: &FontRef,
-    input: BlurInput,          // 使用结构体传递文本
+    input: BlurInput,
     assets: &BlurStyleResources 
 ) -> DynamicImage {
     let t0 = Instant::now();
@@ -138,8 +127,7 @@ pub fn process(
     let scale_model = PxScale::from(font_size_model);
     let scale_params = PxScale::from(font_size_params);
 
-    // 🟢 直接使用 input.model，不做任何清洗
-    // Parser 层已经保证了这里是干净的 "Z 50" 或 "A7R V"
+    // 🟢 直接使用 input.model (Parser 已经清洗过)
     let model_str = input.model; 
 
     // --- 1. 测量第一行 [Logo] [Gap] [Model] ---
@@ -214,16 +202,15 @@ pub fn process(
 
         // 机型文字
         if model_text_w > 0 {
-            // 🟢 统一使用 "Medium"
-            graphics::draw_text_high_quality(
+            // 🟢 2. 直接使用 draw_text_mut
+            draw_text_mut(
                 &mut canvas, 
                 cfg.text_color_model, 
                 cursor_x as i32, 
                 line1_base_y as i32, 
                 scale_model, 
                 font, 
-                model_str,
-                "Medium" 
+                model_str
             );
         }
     }
@@ -233,16 +220,15 @@ pub fn process(
         let line2_x = (canvas_w - params_w) / 2;
         let line2_y = block_start_y + line1_height + gap_lines;
         
-        // 🟢 统一使用 "Medium"
-        graphics::draw_text_high_quality(
+        // 🟢 2. 直接使用 draw_text_mut
+        draw_text_mut(
             &mut canvas, 
             cfg.text_color_params, 
             line2_x as i32, 
             line2_y as i32, 
             scale_params, 
             font, 
-            input.params,
-            "Medium"
+            input.params
         );
     }
 
