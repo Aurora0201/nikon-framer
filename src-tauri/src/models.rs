@@ -21,6 +21,10 @@ pub enum StyleOptions {
     #[serde(rename_all = "camelCase")] // 🟢 必须加在这里！
     WhitePolaroid,
 
+    // 大师白底 (WhiteMaster)
+    #[serde(rename_all = "camelCase")]
+    WhiteMaster,
+
     // 变体 2：高斯模糊 (关心字体 + 阴影)
     #[serde(rename_all = "camelCase")] // 🟢 必须加在这里！
     TransparentClassic,
@@ -41,7 +45,8 @@ impl StyleOptions {
             Self::WhiteClassic => "WhiteClassic",      // 对应生成 xxx_White.jpg
             Self::TransparentClassic => "TransparentClassic", // 对应生成 xxx_Blur.jpg
             Self::TransparentMaster => "TransparentMaster",// 对应生成 xxx_Master.jpg
-            Self::WhitePolaroid => "WhitePolaroid"
+            Self::WhitePolaroid => "WhitePolaroid",
+            Self::WhiteMaster => "WhiteMaster",
             // 以后新增样式，只需要在这里加一行
         }
     }
