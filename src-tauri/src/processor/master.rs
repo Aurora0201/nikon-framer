@@ -5,6 +5,8 @@ use ab_glyph::{FontRef, PxScale};
 use imageproc::drawing::{draw_text_mut, draw_line_segment_mut};
 use std::time::Instant;
 
+use crate::graphics::generate_blurred_background;
+
 // ==========================================
 // 1. 数据结构定义
 // ==========================================
@@ -85,8 +87,17 @@ pub fn process(
 
     // 3. 生成背景
     let start_bg = Instant::now();
-    let mut canvas = create_aspect_fill_bg_optimized(img, canvas_w, canvas_h, cfg.bg_blur_radius);
-    canvas = canvas.brighten(-15); 
+    
+    // 🟢 [修改] 调用公共方法
+    // Master 模式亮度微调为 -15
+    let mut canvas = generate_blurred_background(
+        img, 
+        canvas_w, 
+        canvas_h, 
+        cfg.bg_blur_radius, 
+        -15 
+    );
+    
     println!("[PERF] Master Bg Generation: {:?}", start_bg.elapsed());
 
     let start_overlay = Instant::now();
@@ -176,41 +187,6 @@ pub fn process(
     canvas
 }
 
-// ---------------------------------------------------------
-// 辅助函数 (保持不变)
-// ---------------------------------------------------------
-
-// [高性能版] 缩图 -> 模糊 -> 放大
-fn create_aspect_fill_bg_optimized(img: &DynamicImage, target_w: u32, target_h: u32, blur_radius: f32) -> DynamicImage {
-    let (src_w, src_h) = img.dimensions();
-    let min_dimension = 300.0;
-    
-    let scale_factor = (min_dimension / (src_w.min(src_h) as f64)).min(0.2); 
-    
-    let tiny_w = (src_w as f64 * scale_factor) as u32;
-    let tiny_h = (src_h as f64 * scale_factor) as u32;
-
-    let tiny_img = img.resize_exact(tiny_w, tiny_h, imageops::FilterType::Nearest);
-
-    let ratio_target = target_w as f64 / target_h as f64;
-    let ratio_tiny = tiny_w as f64 / tiny_h as f64;
-
-    let (crop_w, crop_h) = if ratio_target > ratio_tiny {
-        (tiny_w, (tiny_w as f64 / ratio_target) as u32)
-    } else {
-        ((tiny_h as f64 * ratio_target) as u32, tiny_h)
-    };
-
-    let crop_x = (tiny_w - crop_w) / 2;
-    let crop_y = (tiny_h - crop_h) / 2;
-
-    let cropped_tiny = tiny_img.crop_imm(crop_x, crop_y, crop_w, crop_h);
-
-    let effective_blur = blur_radius * (scale_factor as f32);
-    let blurred_tiny = cropped_tiny.blur(effective_blur);
-
-    blurred_tiny.resize_exact(target_w, target_h, imageops::FilterType::Triangle)
-}
 
 fn draw_wide_text(canvas: &mut DynamicImage, center_x: i32, y: i32, text: &str, font: &FontRef, size: f32, color: Rgba<u8>) {
     let scale = PxScale { x: size, y: size };

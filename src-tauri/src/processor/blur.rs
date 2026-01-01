@@ -5,6 +5,7 @@ use imageproc::drawing::{text_size, draw_text_mut};
 use std::time::Instant;
 use std::sync::Arc;
 use std::cmp::min;
+use crate::graphics::effects::generate_blurred_background;
 
 use crate::graphics;
 // 引入父模块通用工具
@@ -53,7 +54,7 @@ impl Default for BlurConfig {
             border_ratio: 0.08,        
             bottom_extra_ratio: 0.85,  
 
-            blur_sigma: 30.0,          
+            blur_sigma: 120.0,          
             bg_brightness: -150,       
             process_limit: 400,        
 
@@ -95,18 +96,20 @@ pub fn process(
     let canvas_h = height + border_size * 2 + bottom_extra_h;
 
     // -------------------------------------------------------------
-    // B. 背景生成
+    // B. 背景生成 (重构)
     // -------------------------------------------------------------
     let t_blur = Instant::now();
-    let scale_factor = (width.max(height) as f32 / cfg.process_limit as f32).max(1.0);
-    let small_w = (canvas_w as f32 / scale_factor) as u32;
-    let small_h = (canvas_h as f32 / scale_factor) as u32;
     
-    let small_img = img.resize_exact(small_w, small_h, imageops::FilterType::Nearest);
-    let mut blurred = small_img.blur(cfg.blur_sigma);
-    imageops::colorops::brighten(&mut blurred, cfg.bg_brightness);
-    
-    let mut canvas = blurred.resize_exact(canvas_w, canvas_h, imageops::FilterType::Triangle).to_rgba8();
+    // 🟢 [修改] 调用公共高性能方法
+    // 这里传入 cfg.bg_brightness (通常是 -150)
+    let mut canvas = generate_blurred_background(
+        img, 
+        canvas_w, 
+        canvas_h, 
+        cfg.blur_sigma, 
+        cfg.bg_brightness 
+    ).to_rgba8(); // 注意：generate 返回 DynamicImage，这里转为 RgbaImage
+
     println!("  - [PERF] Blur Background: {:.2?}", t_blur.elapsed());
 
     // -------------------------------------------------------------
