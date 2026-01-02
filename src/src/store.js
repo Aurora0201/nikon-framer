@@ -56,6 +56,8 @@ export const store = reactive({
   activeFilePath: null,
   activePresetId: 'WhiteClassic', // 默认选中 ID
   
+  // 🟢 [新增] 预设加载状态 (用于控制 PresetPanel 的 loading 动画)
+  isLoadingPresets: false,
   // 🟢 [新增] 结果映射表：Key=原图路径, Value=处理后的路径
   processedFiles: new Map(),
 
@@ -77,50 +79,48 @@ export const store = reactive({
 
   get currentPresets() { return PRESET_CONFIGS[this.settings.style] || []; },
 
-  // 🟢 [核心修改] 智能计算当前预览图 URL
   get previewSource() {
-    // 1. 先找到当前选中的预设配置 (为了拿 img 文件名)
     const allPresets = [...PRESET_CONFIGS.ClassicWhite, ...PRESET_CONFIGS.Transparent];
     const currentConfig = allPresets.find(p => p.id === this.activePresetId);
     
-    // 准备默认的预设预览对象 (兜底)
     const presetPreview = {
       type: 'preset',
       url: currentConfig ? getPresetUrl(currentConfig.img) : null,
       text: '效果预览'
     };
 
-    // 2. 如果没有选文件，直接显示预设
-    if (!this.activeFilePath) {
-      return presetPreview;
-    }
+    if (!this.activeFilePath) return presetPreview;
 
-    // ---------------------------------------------------------
-    // 🔴 你的报错是因为缺少了下面这一行定义！
-    // 必须先从 Map 中获取数据，赋值给 resultData 变量
-    // ---------------------------------------------------------
-    const resultData = this.processedFiles.get(this.activeFilePath);
+    // 🟢 [修复 1] 使用复合 Key 获取缓存
+    // 只有当 "当前文件 + 当前模式" 都有结果时，才返回 Result
+    const cacheKey = `${this.activeFilePath}|${this.activePresetId}`;
+    const resultData = this.processedFiles.get(cacheKey);
 
-    // 3. 检查是否有结果
     if (resultData) {
-      // ✅ 情况 A: 有结果 -> 显示真实结果 (Base64)
       return {
         type: 'result',
-        // resultData 现在是 "data:image/jpeg;base64,..."，直接用
         url: resultData, 
         text: '已生成'
       };
     } else {
-      // ❌ 情况 B: 没结果 -> 显示预设图
       return presetPreview;
     }
   },
 
   // --- Actions ---
 
-  // 切换大类模式
-  setMode(newMode) {
+  // 🟢 [修改] 切换大类模式 (支持 Loading 状态)
+  async setMode(newMode) {
+    // 1. 开始加载
+    this.isLoadingPresets = true;
+
+    // 2. (可选) 模拟一个微小的延迟，让 Loading 动画展示出来，提升交互质感
+    // 如果未来这里变成 await invoke('get_presets_from_rust')，这个逻辑就非常有用了
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // 3. 执行原有的切换逻辑
     this.settings.style = newMode;
+    
     // 切换模式后，自动选中该模式下的第一个预设
     const presets = this.currentPresets;
     if (presets.length > 0) {
@@ -128,6 +128,9 @@ export const store = reactive({
     } else {
       this.activePresetId = null;
     }
+
+    // 4. 结束加载
+    this.isLoadingPresets = false;
   },
 
   // 切换具体预设
@@ -140,15 +143,38 @@ export const store = reactive({
     }
   },
 
-  // 🟢 [新增] 标记某张图已处理 (Rust 生成成功后调用)
+  // 🟢 [修复 2] 存入缓存时，带上 PresetId
   markFileProcessed(originalPath, outputPath) {
-    this.processedFiles.set(originalPath, outputPath);
+    // 注意：这里需要知道这张图是哪个模式生成的。
+    // 在目前的逻辑里，Rust 生成完时，activePresetId 通常就是当前模式。
+    // 如果支持后台批量生成，这里可能需要传 style 参数进来。
+    // 假设目前是单张实时处理：
+    const key = `${originalPath}|${this.activePresetId}`;
+    this.processedFiles.set(key, outputPath);
+  },
+  
+  // 重载版本：如果 Watcher 明确知道是检查哪个 style 的文件
+  // 我们可以在 store 里加一个更明确的方法，或者让上面的方法支持第三个参数
+  // 为了配合 Workspace.vue 中的 checkPreviewStatus:
+  markFileProcessedWithStyle(originalPath, style, outputPath) {
+    const key = `${originalPath}|${style}`;
+    this.processedFiles.set(key, outputPath);
   },
 
-  // 🟢 [新增] 清除某张图的处理状态 (Watcher 发现文件不存在时调用)
+  // 🟢 [修复 3] 清除缓存时，带上 PresetId
   clearProcessedStatus(originalPath) {
-    if (this.processedFiles.has(originalPath)) {
-      this.processedFiles.delete(originalPath);
+    // 默认清除当前模式的缓存
+    const key = `${originalPath}|${this.activePresetId}`;
+    if (this.processedFiles.has(key)) {
+      this.processedFiles.delete(key);
+    }
+  },
+  
+  // 配合 Workspace.vue 的重载版本
+  clearProcessedStatusWithStyle(originalPath, style) {
+    const key = `${originalPath}|${style}`;
+    if (this.processedFiles.has(key)) {
+      this.processedFiles.delete(key);
     }
   },
 
@@ -177,9 +203,14 @@ export const store = reactive({
     
     // 移除文件时，也要清理掉它的缓存状态
     if (fileToRemove) {
-      this.processedFiles.delete(fileToRemove.path);
+      // 🟢 [修复 4] 移除文件时，要清理该文件对应的“所有模式”的缓存
+      // Map 的遍历删除性能开销极小，直接遍历即可
+      for (const [key] of this.processedFiles) {
+        if (key.startsWith(`${fileToRemove.path}|`)) {
+          this.processedFiles.delete(key);
+        }
+      }
     }
-
     this.fileQueue.splice(index, 1);
 
     if (isRemovingActive) {

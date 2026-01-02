@@ -2,19 +2,95 @@
 import { watch, ref, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { store } from '../../store.js';
+import LoadingSpinner from '../common/LoadingSpinner.vue';
 
-// ... (逻辑部分保持完全不变) ...
+// -------------------------------------------------------------
+// 🟢 [核心修复] 防止图片跳变的“冻结显示”逻辑
+// -------------------------------------------------------------
+
+// 1. 本地状态：增加 presetId 字段，记录当前显示的图属于哪个预设
+const frozenDisplay = ref({ 
+  url: '', 
+  type: 'preset', 
+  text: '', 
+  presetId: '' // 🟢 新增：记录这张图是哪个预设的 ID
+});
+
+// 2. 本地状态：浏览器是否正在下载/解码图片
+const imgLoading = ref(false);
+
+// 3. 合并 Loading 状态
+const isBusy = computed(() => {
+  return store.isProcessing || imgLoading.value || store.isLoadingPresets;
+});
+
+// 🟢 4. 智能防抖 Watcher (修复版)
+watch(
+  () => ({ 
+    source: store.previewSource, 
+    processing: store.isProcessing,
+    switching: store.isLoadingPresets,
+    currentId: store.activePresetId // 🟢 监听当前的 ID
+  }),
+  ({ source, processing, switching, currentId }) => {
+    // 拦截一：繁忙状态 (处理中/切换中) -> 冻结
+    if (processing || switching) return;
+
+    // 🛡️ 拦截二：防退化机制 (Anti-Downgrade)
+    // 逻辑修正：
+    // 只有当 [新旧 ID 相同] 时，才不允许从 Result 变回 Preset。
+    // 如果 [新旧 ID 不同] (说明用户切了模式)，必须允许更新，否则会显示上一个模式的图。
+    const isSamePreset = frozenDisplay.value.presetId === currentId;
+
+    if (
+      source.type === 'preset' && 
+      frozenDisplay.value.type === 'result' && 
+      store.activeFilePath &&
+      isSamePreset // 🟢 关键：只有同一个模式下才防抖
+    ) {
+      // console.log('🛡️ 同模式下触发防退化：保持显示旧结果');
+      return; 
+    }
+
+    // ✅ 通行：更新画面，并记录当前的 ID
+    frozenDisplay.value = { ...source, presetId: currentId };
+  },
+  { deep: true, immediate: true }
+);
+
+// 5. 监听 URL 变化触发前端 Loading (保持不变)
+watch(() => frozenDisplay.value.url, (newVal, oldVal) => {
+  if (newVal && newVal !== oldVal) {
+    imgLoading.value = true;
+  }
+});
+
+// ... (以下所有代码保持不变：handleImgLoad, checkPreviewStatus, 缩放逻辑等) ...
+const handleImgLoad = () => { imgLoading.value = false; };
+const handleImgError = (e) => {
+  imgLoading.value = false;
+  e.target.style.backgroundColor = '#333';
+  e.target.alt = "图片丢失";
+};
+
 const checkPreviewStatus = async () => {
   if (!store.activeFilePath || !store.activePresetId) return;
+  
+  // 记录下发起请求时的 ID，防止异步回来后 ID 已经变了
+  const currentPath = store.activeFilePath;
+  const currentStyle = store.activePresetId;
+
   try {
     const existingPath = await invoke('check_output_exists', {
-      filePath: store.activeFilePath,
-      style: store.activePresetId 
+      filePath: currentPath,
+      style: currentStyle
     });
+    
     if (existingPath) {
-      store.markFileProcessed(store.activeFilePath, existingPath);
+      // 🟢 使用带 Style 的明确方法
+      store.markFileProcessedWithStyle(currentPath, currentStyle, existingPath);
     } else {
-      store.clearProcessedStatus(store.activeFilePath);
+      store.clearProcessedStatusWithStyle(currentPath, currentStyle);
     }
   } catch (e) {
     console.error("检查文件存在性失败:", e);
@@ -22,19 +98,16 @@ const checkPreviewStatus = async () => {
 };
 
 watch([() => store.activeFilePath, () => store.activePresetId], () => checkPreviewStatus(), { immediate: true });
-watch(() => store.isProcessing, (newVal, oldVal) => { if (oldVal === true && newVal === false) checkPreviewStatus(); });
-
-// --- 缩放拖拽逻辑 (保持不变) ---
-const transformState = ref({
-  scale: 1, panning: false, pointX: 0, pointY: 0, startX: 0, startY: 0
+watch(() => store.isProcessing, (newVal, oldVal) => { 
+  if (oldVal === true && newVal === false) checkPreviewStatus(); 
 });
 
+const transformState = ref({ scale: 1, panning: false, pointX: 0, pointY: 0, startX: 0, startY: 0 });
 const imageStyle = computed(() => ({
   transform: `translate(${transformState.value.pointX}px, ${transformState.value.pointY}px) scale(${transformState.value.scale})`,
   cursor: transformState.value.panning ? 'grabbing' : 'grab',
   transition: transformState.value.panning ? 'none' : 'transform 0.1s ease-out'
 }));
-
 const handleWheel = (e) => {
   e.preventDefault();
   const zoomIntensity = 0.1;
@@ -43,33 +116,23 @@ const handleWheel = (e) => {
   newScale = Math.min(Math.max(0.1, newScale), 5);
   transformState.value.scale = newScale;
 };
-
 const startDrag = (e) => {
   if (e.button !== 0) return;
   transformState.value.panning = true;
   transformState.value.startX = e.clientX - transformState.value.pointX;
   transformState.value.startY = e.clientY - transformState.value.pointY;
 };
-
 const onDrag = (e) => {
   if (!transformState.value.panning) return;
   e.preventDefault();
   transformState.value.pointX = e.clientX - transformState.value.startX;
   transformState.value.pointY = e.clientY - transformState.value.startY;
 };
-
 const stopDrag = () => { transformState.value.panning = false; };
-
 const resetView = () => {
   transformState.value = { scale: 1, panning: false, pointX: 0, pointY: 0, startX: 0, startY: 0 };
 };
-
-watch(() => store.previewSource.url, () => { resetView(); });
-
-const handleImgError = (e) => {
-  e.target.style.backgroundColor = '#333';
-  e.target.alt = "图片丢失";
-};
+watch(() => frozenDisplay.value.url, () => { resetView(); });
 </script>
 
 <template>
@@ -88,19 +151,24 @@ const handleImgError = (e) => {
     @mouseleave="stopDrag"
     @dblclick="resetView"
   >
-    <div v-if="store.previewSource.url" class="viewport-container">
+    <Transition name="fade">
+      <LoadingSpinner v-if="isBusy" text="处理中..." mode="overlay" />
+    </Transition>
+
+    <div v-if="frozenDisplay.url" class="viewport-container">
       <div class="image-wrapper" :style="imageStyle">
         <img 
-          :src="store.previewSource.url" 
+          :src="frozenDisplay.url" 
           class="main-img" 
           alt="Preview" 
+          @load="handleImgLoad" 
           @error="handleImgError"
           draggable="false" 
         />
-      </div>
+        </div>
       
-      <div class="status-badge" :class="store.previewSource.type">
-        {{ store.previewSource.text }}
+      <div v-if="!isBusy" class="status-badge" :class="frozenDisplay.type">
+        {{ frozenDisplay.text }}
       </div>
     </div>
 
@@ -125,6 +193,13 @@ const handleImgError = (e) => {
 
 <style scoped>
 /* ... (Header 样式保持不变) ... */
+
+/* 🟢 添加简单的淡入淡出动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
 .workspace-header {
   height: 40px;
   display: flex;

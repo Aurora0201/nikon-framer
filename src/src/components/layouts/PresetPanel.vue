@@ -1,5 +1,7 @@
 <script setup>
 import { store } from '../../store.js';
+// 🟢 1. 引入新写的骨架屏组件
+import PresetSkeleton from '../common/PresetSkeleton.vue';
 
 // 🟢 1. 增强版图片加载器 (带调试日志)
 const getImageUrl = (filename) => {
@@ -34,32 +36,38 @@ const handleImgError = (e, filename) => {
   </div>
 
   <div class="panel-body">
-    <div v-if="store.currentPresets.length === 0" class="empty-state">
+
+    <div v-if="store.isLoadingPresets" class="skeleton-list">
+      <PresetSkeleton v-for="n in 3" :key="n" />
+    </div>
+    
+    <div v-else-if="store.currentPresets.length === 0" class="empty-state">
       <div class="emoji">🖼️</div>
       <div>请在左侧选择<br>白底或透明模式</div>
     </div>
 
-    <div 
-      v-else
-      v-for="preset in store.currentPresets" 
-      :key="preset.id"
-      class="preset-card"
-      :class="{ active: store.activePresetId === preset.id }"
-      @click="store.applyPreset(preset)"
-    >
-      <div class="img-wrapper">
-        <img :src="getImageUrl(preset.img)" class="preset-img" loading="lazy" />
-        
-        <div class="active-overlay" v-if="store.activePresetId === preset.id">
-          <div class="check-icon">✓</div>
+    <div v-else class="preset-list">
+      <div 
+        v-for="preset in store.currentPresets" 
+        :key="preset.id"
+        class="preset-card"
+        :class="{ active: store.activePresetId === preset.id }"
+        @click="store.applyPreset(preset)"
+      >
+        <div class="img-wrapper">
+          <img :src="getImageUrl(preset.img)" class="preset-img" loading="lazy" />
+          <div class="active-overlay" v-if="store.activePresetId === preset.id">
+            <div class="check-icon">✓</div>
+          </div>
+        </div>
+
+        <div class="info-wrapper">
+          <div class="title">{{ preset.name }}</div>
+          <div class="desc">{{ preset.desc }}</div>
         </div>
       </div>
-
-      <div class="info-wrapper">
-        <div class="title">{{ preset.name }}</div>
-        <div class="desc">{{ preset.desc }}</div>
-      </div>
     </div>
+
   </div>
 </template>
 
@@ -95,6 +103,11 @@ const handleImgError = (e, filename) => {
   overflow-y: auto; 
   
   padding: 12px;
+}
+
+/* 🟢 新增：专门用于包裹列表的容器，负责间距 */
+.skeleton-list,
+.preset-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
