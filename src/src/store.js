@@ -9,6 +9,7 @@ const PRESET_CONFIGS = {
     { id: 'WhiteClassic', name: 'Standard White', desc: '标准白底 / 简约风格', img: 'white_standard.jpg' },
     { id: 'WhitePolaroid', name: 'Polaroid White', desc: '宝丽来风格', img: 'polaroid_white.jpg' },
     { id: 'WhiteMaster', name: 'Master White', desc: '大师风格', img: 'polaroid_white.jpg' },
+    { id: 'WhiteModern', name: 'Modern White', desc: '现代风格', img: 'polaroid_white.jpg' },
   ],
   Transparent: [
     { id: 'TransparentMaster', name: 'Glass Blur', desc: '大师风格 / 模糊', img: 'transparent_standard.jpg' },
@@ -22,7 +23,7 @@ const MODE_OPTIONS = [
 ];
 
 
-// 🟢 [核心修复] 使用 Glob 导入
+// 🟢 [核心修复] 使用 Glob 导入a
 // 1. eager: true 表示直接加载路径字符串，而不是返回 Promise
 // 2. import: 'default' 确保直接拿到图片 URL
 // 3. 注意：这里的路径 './assets/presets/*' 必须是相对于 store.js 的准确路径！
@@ -53,7 +54,7 @@ export const store = reactive({
   // --- 核心状态 ---
   fileQueue: [],
   activeFilePath: null,
-  activePresetId: 'BottomWhite', // 默认选中 ID
+  activePresetId: 'WhiteClassic', // 默认选中 ID
   
   // 🟢 [新增] 结果映射表：Key=原图路径, Value=处理后的路径
   processedFiles: new Map(),
