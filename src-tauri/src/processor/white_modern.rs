@@ -14,7 +14,6 @@ use std::time::Instant;
 use rayon::prelude::*; 
 
 use crate::graphics::shadow::ShadowProfile;
-use crate::graphics; 
 
 // ==========================================
 // 1. 数据结构定义
@@ -29,6 +28,7 @@ pub struct WhiteModernInput {
     pub focal: String,
 }
 
+#[allow(dead_code)]
 pub struct WhiteModernResources {
     pub logo: Option<DynamicImage>, 
 }
@@ -113,14 +113,26 @@ fn get_brand_script_offset(brand: &str) -> f32 {
     }
 }
 
+/// 🟢 [性能优化] 快速创建白底背景
+/// 优化点：
+/// 1. 避免了 `flat_map` 导致的每一行都创建一个临时 Vec 的巨大开销。
+/// 2. 使用一次性内存分配。
+/// 3. 使用 par_chunks_mut 并行填充内存。
 fn fast_create_white_background(w: u32, h: u32) -> RgbaImage {
-    let raw_buffer: Vec<u8> = (0..h)
-        .into_par_iter()
-        .flat_map(|_| vec![255u8; (w * 4) as usize])
-        .collect();
+    let len = (w as usize) * (h as usize) * 4;
+    // 一次性分配内存，避免碎片
+    let mut raw_buffer = vec![0u8; len]; 
+    
+    // 并行填充白色 (255)
+    // 4096 是一个经验值的 chunk size，避免太小的任务切换开销
+    raw_buffer.par_chunks_mut(4096).for_each(|chunk| {
+        chunk.fill(255);
+    });
+
     RgbaImage::from_raw(w, h, raw_buffer).unwrap()
 }
-
+/// 高质量实心圆角矩形绘制
+/// 🟢 [性能优化] 预分配 Vec 容量，避免 push 时的扩容
 fn draw_rounded_rect_mut_polyfill(canvas: &mut DynamicImage, rect: Rect, radius: i32, color: Rgba<u8>) {
     let x = rect.left() as f32;
     let y = rect.top() as f32;
@@ -134,8 +146,10 @@ fn draw_rounded_rect_mut_polyfill(canvas: &mut DynamicImage, rect: Rect, radius:
         return;
     }
 
-    let mut points: Vec<Point<i32>> = Vec::new();
     let segments_per_corner = 16; 
+    // 预分配容量：4个角 * (16段+1起点) 
+    // 虽然稍微多一点点，但保证不会重分配
+    let mut points: Vec<Point<i32>> = Vec::with_capacity(80); 
 
     let mut add_arc = |center_x: f32, center_y: f32, start_angle: f32| {
         for i in 0..=segments_per_corner {
@@ -197,21 +211,19 @@ pub fn process(
     
     let (src_w, src_h) = img.dimensions();
     
-    // 🟢 [核心优化] 竖构图自动等比缩放逻辑
-    // 如果是竖构图 (h > w)，强行缩小 border_ratio 和 bottom_ratio
-    // 0.55 是经验值，能让竖图的底栏高度看起来和横图差不多
+    // 竖构图优化逻辑
     let is_portrait = src_h > src_w;
     let portrait_scale = if is_portrait { 0.55 } else { 1.0 }; 
 
-    // 应用缩放系数
+    // 尺寸计算 (应用缩放)
     let border_size = (src_h as f32 * cfg.border_ratio * portrait_scale) as u32;
     let bottom_height = (src_h as f32 * cfg.bottom_ratio * portrait_scale) as u32;
     
     let canvas_w = src_w + border_size * 2;
     let canvas_h = src_h + border_size + bottom_height;
     
-    // 1. 背景与阴影
-    let mut canvas_buffer = fast_create_white_background(canvas_w, canvas_h);
+    // 1. 背景创建 (已优化)
+    let canvas_buffer = fast_create_white_background(canvas_w, canvas_h);
     let mut canvas = DynamicImage::ImageRgba8(canvas_buffer);
 
     let img_x = border_size as i64;
@@ -231,8 +243,6 @@ pub fn process(
     // =========================================
     // 5. Header 排版
     // =========================================
-    // 注意：所有的 bh 都是基于已经缩放过的 bottom_height
-    // 所以字体大小会自动变小，无需额外操作
     let bh = bottom_height as f32;
     let center_x = (canvas_w / 2) as i32;
     let content_start_y = (border_size + src_h) as i32;
@@ -244,10 +254,10 @@ pub fn process(
     let script_scale = PxScale::from(script_size);
     let model_scale = PxScale::from(model_size);
 
-    let brand_text = input.brand.clone(); 
+    // 🟢 [优化] 移除 clone，直接使用引用
+    let brand_text = &input.brand; 
     
-    let (brand_w, brand_h) = imageproc::drawing::text_size(script_scale, font_script, &brand_text);
-    // 🟢 使用 font_medium 保持一致性
+    let (brand_w, brand_h) = imageproc::drawing::text_size(script_scale, font_script, brand_text);
     let (model_w, model_h) = imageproc::drawing::text_size(model_scale, font_medium, &input.model);
     
     // 布局计算
@@ -267,14 +277,14 @@ pub fn process(
     let color_pen_blue = Rgba([35, 65, 140, 255]); 
 
     // --- A. 品牌 (Script) ---
-    let brand_fix_ratio = get_brand_script_offset(&input.brand);
+    let brand_fix_ratio = get_brand_script_offset(brand_text);
     let brand_fix_px = (script_size * brand_fix_ratio) as i32;
 
     let script_draw_x = start_x;
     let script_y_start = header_center_y_line - (brand_h as i32 / 2);
     let script_final_y = script_y_start - (script_size * cfg.script_y_nudge) as i32 + brand_fix_px;
     
-    draw_text_mut(&mut canvas, color_pen_blue, script_draw_x, script_final_y, script_scale, font_script, &brand_text);
+    draw_text_mut(&mut canvas, color_pen_blue, script_draw_x, script_final_y, script_scale, font_script, brand_text);
 
     // --- B. 机型 (Medium) ---
     let model_draw_x = start_x + brand_w as i32 + gap_px + model_x_offset_px;
@@ -338,7 +348,6 @@ pub fn process(
             Some(standard_val_h as i32)
         );
         
-        // 🟢 使用 font_medium
         let lbl_y = badges_y + badge_h as i32 + (bh * 0.08) as i32;
         let (lbl_w, _) = imageproc::drawing::text_size(PxScale::from(lbl_size), font_medium, lbl);
         let lbl_x = current_badge_x + (badge_w as i32 / 2) - (lbl_w as i32 / 2);
