@@ -5,6 +5,7 @@ pub mod traits;
 pub mod transparent_master;
 pub mod white_polaroid;
 pub mod white_master;
+pub mod white_modern; // 🟢
 
 // 2. 引入标准库与第三方库
 use std::sync::Arc;
@@ -26,6 +27,7 @@ use crate::processor::white_polaroid::{PolaroidResources, PolaroidInput};
 use crate::processor::transparent_master::TransparentMasterInput;
 // 🟢 引入 WhiteMaster 专用输入结构
 use crate::processor::white_master::WhiteMasterInput;
+use crate::processor::white_modern::{WhiteModernInput, WhiteModernResources}; // 🟢
 
 // --- 公共辅助函数 ---
 
@@ -212,6 +214,46 @@ impl FrameProcessor for WhiteMasterProcessor {
 }
 
 // ==========================================
+// 策略 6: 现代白底处理器 (WhiteModern)
+// ==========================================
+pub struct WhiteModernProcessor {
+    pub font_bold: Arc<Vec<u8>>,
+    pub font_regular: Arc<Vec<u8>>,
+    pub font_medium: Arc<Vec<u8>>, 
+    // 🟢 1. 新增手写字体字段
+    pub font_script: Arc<Vec<u8>>, 
+    
+}
+
+impl FrameProcessor for WhiteModernProcessor {
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
+        let bold = FontRef::try_from_slice(&self.font_bold).unwrap();
+        let medium = FontRef::try_from_slice(&self.font_medium).unwrap();
+        let regular = FontRef::try_from_slice(&self.font_regular).unwrap();
+        // 🟢 2. 加载手写字体
+        let script = FontRef::try_from_slice(&self.font_script)
+             .map_err(|_| "WhiteModern: Birthstone 字体加载失败")?;
+
+        let input = WhiteModernInput {
+            brand: ctx.brand.to_string(),
+            model: ctx.model_name.clone(),
+            iso: ctx.params.iso.map(|v| v.to_string()).unwrap_or_default(),
+            aperture: ctx.params.aperture.map(|v| v.to_string()).unwrap_or_default(),
+            shutter: ctx.params.shutter_speed.replace("s", "").trim().to_string(),
+            focal: ctx.params.focal_length.map(|v| v.to_string()).unwrap_or_default(),
+        };
+        
+        let assets = WhiteModernResources {
+            logo: None, // 不再需要 Logo 图片
+        };
+
+        // 🟢 3. 传入 script 字体
+        Ok(white_modern::process(img, input, &assets, &bold, &medium, &regular, &script))
+    }
+}
+
+
+// ==========================================
 // 工厂函数: 核心装配车间
 // ==========================================
 pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send + Sync> {
@@ -255,6 +297,16 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
                 serif_font: resources::get_font(FontFamily::AbhayaLibre, FontWeight::Medium),
             })
         },
+
+        StyleOptions::WhiteModern => {
+            Box::new(WhiteModernProcessor {
+                // Modern 风格建议搭配无衬线字体
+                font_bold: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold),
+                font_medium: resources::get_font(FontFamily::InterDisplay, FontWeight::Medium),
+                font_script: resources::get_font(FontFamily::Birthstone, FontWeight::Regular),
+                font_regular: resources::get_font(FontFamily::InterDisplay, FontWeight::Regular),
+            })
+        }
 
     }
 }

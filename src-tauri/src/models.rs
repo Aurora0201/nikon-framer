@@ -34,7 +34,8 @@ pub enum StyleOptions {
     #[serde(rename_all = "camelCase")]
     TransparentMaster,
 
-
+    #[serde(rename_all = "camelCase")]
+    WhiteModern, // 🟢 新增
 
 }
 
@@ -47,6 +48,7 @@ impl StyleOptions {
             Self::TransparentMaster => "TransparentMaster",// 对应生成 xxx_Master.jpg
             Self::WhitePolaroid => "WhitePolaroid",
             Self::WhiteMaster => "WhiteMaster",
+            Self::WhiteModern => "WhiteModern",
             // 以后新增样式，只需要在这里加一行
         }
     }

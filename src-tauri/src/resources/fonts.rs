@@ -26,6 +26,7 @@ pub enum FontFamily {
     InterDisplay,  // 现代无衬线
     MrDafoe,       // 手写体
     AbhayaLibre,   // 衬线体
+    Birthstone,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -49,6 +50,7 @@ impl FontKey {
             (FontFamily::InterDisplay, _)                  => "InterDisplay-Regular.otf",
             (FontFamily::MrDafoe, _)                       => "MrDafoe-Regular.ttf",
             (FontFamily::AbhayaLibre, _)                   => "AbhayaLibre-Medium.ttf",
+            (FontFamily::Birthstone, _)                    => "Birthstone-Regular.ttf"
         }
     }
 }
@@ -69,19 +71,47 @@ pub fn get_font(family: FontFamily, weight: FontWeight) -> Arc<Vec<u8>> {
         return data.clone();
     }
 
-    // 2. 加载文件
+    // 2. 确定文件名
     let filename = key.filename();
     
-    // 使用全局初始化的路径
+    // 3. 🟢 [核心修改] 智能路径查找策略
+    // 策略 A: 优先使用 setup.rs 初始化的路径 (通常指向 target/debug/assets 或 安装后的资源目录)
     let base_dir_guard = FONT_BASE_DIR.lock().unwrap();
-    // 兜底逻辑：如果未初始化(如测试环境)，尝试相对路径
-    let folder = base_dir_guard.as_deref().unwrap_or(Path::new("assets/fonts"));
-    let path = folder.join(filename);
     
-    println!("📦 [LazyLoad] Font: {:?} -> {:?}", key, path);
+    // 构造首选路径
+    let primary_path = if let Some(base) = base_dir_guard.as_deref() {
+        base.join(filename)
+    } else {
+        // 如果未初始化，默认找相对路径
+        Path::new("assets/fonts").join(filename)
+    };
 
-    let data = fs::read(&path).unwrap_or_else(|_| {
-        eprintln!("❌ 严重错误: 字体文件缺失 {:?}，加载空数据", path);
+    // 4. 检查文件是否存在，如果不存在，尝试 "开发环境回退策略"
+    let final_path = if primary_path.exists() {
+        primary_path
+    } else {
+        // 🟢 [Dev Fallback] 如果首选路径找不到，尝试去源码目录找
+        // CARGO_MANIFEST_DIR 是编译时环境变量，指向 Cargo.toml 所在的目录 (即 src-tauri)
+        let source_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("assets/fonts")
+            .join(filename);
+
+        if source_path.exists() {
+            println!("⚠️ [Resources] 首选路径缺失，回退到源码目录加载: {:?}", source_path);
+            source_path
+        } else {
+            // 如果源码目录也没有，那就真的没了，还是报错原路径让用户检查
+            primary_path 
+        }
+    };
+
+    println!("📦 [LazyLoad] Font: {:?} -> {:?}", key, final_path);
+
+    let data = fs::read(&final_path).unwrap_or_else(|e| {
+        // 打印详细错误信息，帮助调试
+        eprintln!("❌ 严重错误: 无法读取字体文件!");
+        eprintln!("   - 尝试路径: {:?}", final_path);
+        eprintln!("   - 系统错误: {}", e);
         vec![]
     });
 
