@@ -1,0 +1,353 @@
+use image::{DynamicImage, Rgba, GenericImageView, RgbaImage, imageops};
+use ab_glyph::{FontRef, PxScale};
+use imageproc::drawing::{
+    draw_text_mut, 
+    draw_filled_rect_mut,
+    draw_polygon_mut 
+};
+use imageproc::point::Point;
+use imageproc::rect::Rect;
+
+use std::cmp::max;
+use std::f32::consts::PI; 
+use std::time::Instant;
+use rayon::prelude::*; 
+
+use crate::graphics::shadow::ShadowProfile;
+use crate::graphics; 
+
+// ==========================================
+// 1. 数据结构定义
+// ==========================================
+
+pub struct WhiteModernInput {
+    pub brand: String,
+    pub model: String,
+    pub iso: String,
+    pub aperture: String,
+    pub shutter: String,
+    pub focal: String,
+}
+
+pub struct WhiteModernResources {
+    pub logo: Option<DynamicImage>, 
+}
+
+// ==========================================
+// 2. 布局配置
+// ==========================================
+struct WhiteModernLayoutConfig {
+    border_ratio: f32,       
+    bottom_ratio: f32,       
+    
+    model_text_scale: f32,
+    script_scale_ratio: f32, 
+
+    param_val_scale: f32,    
+    param_lbl_scale: f32,    
+    
+    gap_image_model: f32,    
+    gap_model_params: f32,   
+    
+    gap_brand_model: f32,   
+    
+    script_y_nudge: f32,
+    model_y_nudge: f32,
+    
+    model_x_nudge: f32,
+    header_overall_y_nudge: f32,
+
+    val_y_nudge_ratio: f32,
+
+    badge_width_ratio: f32,  
+    badge_height_ratio: f32, 
+    badge_gap: f32,          
+}
+
+impl WhiteModernLayoutConfig {
+    fn default() -> Self {
+        Self {
+            // ===========================================
+            // 🟢 用户参数 (保持不变)
+            // ===========================================
+            border_ratio: 0.05,     
+            bottom_ratio: 0.35,     
+            
+            model_text_scale: 0.20, 
+            script_scale_ratio: 1.6,
+
+            param_val_scale: 0.12,  
+            param_lbl_scale: 0.095, 
+            
+            gap_image_model: 0.18,  
+            gap_model_params: 0.15, 
+            
+            gap_brand_model: 0.1,      
+            
+            header_overall_y_nudge: 0.05,
+            
+            script_y_nudge: 0.3,
+            model_y_nudge: 0.18,
+            model_x_nudge: 0.0, 
+
+            val_y_nudge_ratio: 0.28,
+            
+            badge_width_ratio: 1.8, 
+            badge_height_ratio: 0.22,
+            badge_gap: 0.40,         
+        }
+    }
+}
+
+// ==========================================
+// 3. 辅助函数
+// ==========================================
+
+fn get_brand_script_offset(brand: &str) -> f32 {
+    let b = brand.trim().to_lowercase();
+    match b.as_str() {
+        "sony" => 0.05, 
+        "fujifilm" | "fuji" => 0.05,
+        "olympus" => 0.10,
+        _ => 0.0, 
+    }
+}
+
+fn fast_create_white_background(w: u32, h: u32) -> RgbaImage {
+    let raw_buffer: Vec<u8> = (0..h)
+        .into_par_iter()
+        .flat_map(|_| vec![255u8; (w * 4) as usize])
+        .collect();
+    RgbaImage::from_raw(w, h, raw_buffer).unwrap()
+}
+
+fn draw_rounded_rect_mut_polyfill(canvas: &mut DynamicImage, rect: Rect, radius: i32, color: Rgba<u8>) {
+    let x = rect.left() as f32;
+    let y = rect.top() as f32;
+    let w = rect.width() as f32;
+    let h = rect.height() as f32;
+    
+    let r = (radius as f32).min(w / 2.0).min(h / 2.0);
+
+    if r <= 0.5 {
+        draw_filled_rect_mut(canvas, rect, color);
+        return;
+    }
+
+    let mut points: Vec<Point<i32>> = Vec::new();
+    let segments_per_corner = 16; 
+
+    let mut add_arc = |center_x: f32, center_y: f32, start_angle: f32| {
+        for i in 0..=segments_per_corner {
+            let angle = start_angle + (i as f32 / segments_per_corner as f32) * (PI / 2.0);
+            let px = center_x + r * angle.cos();
+            let py = center_y + r * angle.sin();
+            points.push(Point::new(px.round() as i32, py.round() as i32));
+        }
+    };
+
+    add_arc(x + w - r, y + r, -PI / 2.0);
+    add_arc(x + w - r, y + h - r, 0.0);
+    add_arc(x + r, y + h - r, PI / 2.0);
+    add_arc(x + r, y + r, PI);
+
+    draw_polygon_mut(canvas, &points, color);
+}
+
+fn draw_centered_text_in_rect_fixed(
+    canvas: &mut DynamicImage, 
+    text: &str, 
+    rect: Rect, 
+    font: &FontRef, 
+    size: f32, 
+    color: Rgba<u8>,
+    nudge_ratio: f32,
+    fixed_height: Option<i32> 
+) {
+    let scale = PxScale::from(size);
+    let (w, h) = imageproc::drawing::text_size(scale, font, text);
+    
+    let center_x = rect.left() + (rect.width() as i32 / 2);
+    let center_y = rect.top() + (rect.height() as i32 / 2);
+    
+    let draw_x = center_x - (w as i32 / 2);
+    let h_ref = fixed_height.unwrap_or(h as i32);
+
+    let nudge_px = (h_ref as f32 * nudge_ratio) as i32;
+    let draw_y = center_y - (h_ref / 2) - nudge_px; 
+    
+    draw_text_mut(canvas, color, draw_x, draw_y, scale, font, text);
+}
+
+// ==========================================
+// 4. 核心处理逻辑
+// ==========================================
+
+pub fn process(
+    img: &DynamicImage,
+    input: WhiteModernInput,
+    _assets: &WhiteModernResources,
+    font_bold: &FontRef,    
+    font_medium: &FontRef, 
+    font_regular: &FontRef, 
+    font_script: &FontRef,  
+) -> DynamicImage {
+    let start_total = Instant::now();
+    let cfg = WhiteModernLayoutConfig::default();
+    
+    let (src_w, src_h) = img.dimensions();
+    
+    // 🟢 [核心优化] 竖构图自动等比缩放逻辑
+    // 如果是竖构图 (h > w)，强行缩小 border_ratio 和 bottom_ratio
+    // 0.55 是经验值，能让竖图的底栏高度看起来和横图差不多
+    let is_portrait = src_h > src_w;
+    let portrait_scale = if is_portrait { 0.55 } else { 1.0 }; 
+
+    // 应用缩放系数
+    let border_size = (src_h as f32 * cfg.border_ratio * portrait_scale) as u32;
+    let bottom_height = (src_h as f32 * cfg.bottom_ratio * portrait_scale) as u32;
+    
+    let canvas_w = src_w + border_size * 2;
+    let canvas_h = src_h + border_size + bottom_height;
+    
+    // 1. 背景与阴影
+    let mut canvas_buffer = fast_create_white_background(canvas_w, canvas_h);
+    let mut canvas = DynamicImage::ImageRgba8(canvas_buffer);
+
+    let img_x = border_size as i64;
+    let img_y = border_size as i64;
+    let img_center_x = img_x + (src_w / 2) as i64;
+    let img_center_y = img_y + (src_h / 2) as i64;
+    
+    ShadowProfile::preset_standard()
+        .draw_adaptive_shadow_on(
+            canvas.as_mut_rgba8().unwrap(), 
+            (src_w, src_h), 
+            (img_center_x, img_center_y)
+        );
+
+    imageops::overlay(&mut canvas, img, img_x, img_y);
+    
+    // =========================================
+    // 5. Header 排版
+    // =========================================
+    // 注意：所有的 bh 都是基于已经缩放过的 bottom_height
+    // 所以字体大小会自动变小，无需额外操作
+    let bh = bottom_height as f32;
+    let center_x = (canvas_w / 2) as i32;
+    let content_start_y = (border_size + src_h) as i32;
+    
+    let base_size = bh * cfg.model_text_scale;
+    let script_size = base_size * cfg.script_scale_ratio; 
+    let model_size = base_size;
+
+    let script_scale = PxScale::from(script_size);
+    let model_scale = PxScale::from(model_size);
+
+    let brand_text = input.brand.clone(); 
+    
+    let (brand_w, brand_h) = imageproc::drawing::text_size(script_scale, font_script, &brand_text);
+    // 🟢 使用 font_medium 保持一致性
+    let (model_w, model_h) = imageproc::drawing::text_size(model_scale, font_medium, &input.model);
+    
+    // 布局计算
+    let gap_px = (bh * cfg.gap_brand_model) as i32;
+    let model_x_offset_px = (model_size * cfg.model_x_nudge) as i32;
+    
+    let header_total_w = brand_w as i32 + gap_px + model_w as i32 + model_x_offset_px;
+    let start_x = center_x - (header_total_w / 2);
+    
+    let header_base_y = content_start_y + (bh * cfg.gap_image_model) as i32;
+    let overall_y_offset = (bh * cfg.header_overall_y_nudge) as i32;
+    let header_y = header_base_y + overall_y_offset;
+    
+    let header_center_y_line = header_y + (model_h as i32 / 2);
+
+    let color_black = Rgba([20, 20, 20, 255]); 
+    let color_pen_blue = Rgba([35, 65, 140, 255]); 
+
+    // --- A. 品牌 (Script) ---
+    let brand_fix_ratio = get_brand_script_offset(&input.brand);
+    let brand_fix_px = (script_size * brand_fix_ratio) as i32;
+
+    let script_draw_x = start_x;
+    let script_y_start = header_center_y_line - (brand_h as i32 / 2);
+    let script_final_y = script_y_start - (script_size * cfg.script_y_nudge) as i32 + brand_fix_px;
+    
+    draw_text_mut(&mut canvas, color_pen_blue, script_draw_x, script_final_y, script_scale, font_script, &brand_text);
+
+    // --- B. 机型 (Medium) ---
+    let model_draw_x = start_x + brand_w as i32 + gap_px + model_x_offset_px;
+    let model_final_y = header_y - (model_size * cfg.model_y_nudge) as i32;
+    
+    draw_text_mut(&mut canvas, color_pen_blue, model_draw_x, model_final_y, model_scale, font_regular, &input.model);
+
+    // =========================================
+    // 6. 底部胶囊排版
+    // =========================================
+    let badge_h = (bh * cfg.badge_height_ratio) as u32;
+    let badge_w = (badge_h as f32 * cfg.badge_width_ratio) as u32; 
+    let badge_stroke = max(4, (src_w as f32 * 0.0030) as u32);
+    let badge_radius = (badge_h / 3) as i32;
+    
+    let val_size = bh * cfg.param_val_scale;
+    let lbl_size = bh * cfg.param_lbl_scale;
+    
+    let (_, standard_val_h) = imageproc::drawing::text_size(PxScale::from(val_size), font_bold, "0");
+
+    let params = vec![
+        (input.shutter, "S"),
+        (input.iso, "ISO"),
+        (input.focal, "mm"),
+        (input.aperture, "F"),
+    ];
+    
+    let gap_badge = (badge_w as f32 * cfg.badge_gap) as i32;
+    let total_badges_w = (badge_w as i32 * 4) + (gap_badge * 3);
+    let mut current_badge_x = center_x - (total_badges_w / 2);
+    
+    let badges_y = header_y + model_h as i32 + (bh * cfg.gap_model_params) as i32;
+    
+    let border_color = Rgba([180, 180, 180, 255]); 
+    let bg_color = Rgba([255, 255, 255, 255]);     
+    let lbl_color = Rgba([100, 100, 100, 255]);    
+
+    for (val, lbl) in params {
+        let rect_outer = Rect::at(current_badge_x, badges_y).of_size(badge_w, badge_h);
+        draw_rounded_rect_mut_polyfill(&mut canvas, rect_outer, badge_radius, border_color);
+        
+        let rect_inner = Rect::at(
+            current_badge_x + badge_stroke as i32, 
+            badges_y + badge_stroke as i32
+        ).of_size(
+            badge_w - badge_stroke * 2, 
+            badge_h - badge_stroke * 2
+        );
+        let inner_radius = max(0, badge_radius - badge_stroke as i32);
+        draw_rounded_rect_mut_polyfill(&mut canvas, rect_inner, inner_radius, bg_color);
+        
+        let rect_text = Rect::at(current_badge_x, badges_y).of_size(badge_w, badge_h);
+        draw_centered_text_in_rect_fixed(
+            &mut canvas, 
+            &val, 
+            rect_text, 
+            font_bold, 
+            val_size, 
+            color_black,
+            cfg.val_y_nudge_ratio,
+            Some(standard_val_h as i32)
+        );
+        
+        // 🟢 使用 font_medium
+        let lbl_y = badges_y + badge_h as i32 + (bh * 0.08) as i32;
+        let (lbl_w, _) = imageproc::drawing::text_size(PxScale::from(lbl_size), font_medium, lbl);
+        let lbl_x = current_badge_x + (badge_w as i32 / 2) - (lbl_w as i32 / 2);
+        
+        draw_text_mut(&mut canvas, lbl_color, lbl_x, lbl_y, PxScale::from(lbl_size), font_medium, lbl);
+        
+        current_badge_x += badge_w as i32 + gap_badge;
+    }
+
+    println!("[PERF] WhiteModern Total: {:?}", start_total.elapsed());
+    canvas
+}
