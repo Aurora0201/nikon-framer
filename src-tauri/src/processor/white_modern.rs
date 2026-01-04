@@ -10,14 +10,58 @@ use imageproc::rect::Rect;
 
 use std::cmp::max;
 use std::f32::consts::PI; 
+use std::sync::Arc;
 use std::time::Instant;
 use rayon::prelude::*; 
 
 use crate::graphics::shadow::ShadowProfile;
+use crate::parser::models::ParsedImageContext;
+use crate::processor::traits::FrameProcessor;
 
 // ==========================================
 // 1. 数据结构定义
 // ==========================================
+
+// ==========================================
+// 策略 6: 现代白底处理器 (WhiteModern)
+// ==========================================
+pub struct WhiteModernProcessor {
+    pub font_bold: Arc<Vec<u8>>,
+    pub font_regular: Arc<Vec<u8>>,
+    pub font_medium: Arc<Vec<u8>>, 
+    // 🟢 1. 新增手写字体字段
+    pub font_script: Arc<Vec<u8>>, 
+    
+}
+
+impl FrameProcessor for WhiteModernProcessor {
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
+        let bold = FontRef::try_from_slice(&self.font_bold).unwrap();
+        let medium = FontRef::try_from_slice(&self.font_medium).unwrap();
+        let regular = FontRef::try_from_slice(&self.font_regular).unwrap();
+        // 🟢 2. 加载手写字体
+        let script = FontRef::try_from_slice(&self.font_script)
+             .map_err(|_| "WhiteModern: Birthstone 字体加载失败")?;
+
+        let input = WhiteModernInput {
+            brand: ctx.brand.to_string(),
+            model: ctx.model_name.clone(),
+            iso: ctx.params.iso.map(|v| v.to_string()).unwrap_or_default(),
+            aperture: ctx.params.aperture.map(|v| v.to_string()).unwrap_or_default(),
+            shutter: ctx.params.shutter_speed.replace("s", "").trim().to_string(),
+            focal: ctx.params.focal_length.map(|v| v.to_string()).unwrap_or_default(),
+        };
+        
+        let assets = WhiteModernResources {
+            logo: None, // 不再需要 Logo 图片
+        };
+
+        // 🟢 3. 传入 script 字体
+        Ok(process(img, input, &assets, &bold, &medium, &regular, &script))
+    }
+}
+
+
 
 pub struct WhiteModernInput {
     pub brand: String,
