@@ -1,15 +1,26 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
+import { store } from '../../store/index.js';
 import LoadingSpinner from '../common/LoadingSpinner.vue';
 
 const props = defineProps({
-  displayData: { type: Object, required: true }, // frozenDisplay
+  displayData: { type: Object, required: true },
   isBusy: { type: Boolean, default: false }
 });
 
 const emit = defineEmits(['img-load', 'img-error']);
+const viewportRef = ref(null);
+const wrapperRef = ref(null);
 
-// --- 缩放与拖拽逻辑 (纯 UI 交互) ---
+const activeLayerComponent = computed(() => {
+  if (props.displayData.type === 'result') return null;
+  
+  const comp = store.currentModeConfig?.layerComponent;
+  
+  return comp;
+});
+
+// --- 缩放逻辑 ---
 const transformState = ref({ scale: 1, panning: false, pointX: 0, pointY: 0, startX: 0, startY: 0 });
 
 const imageStyle = computed(() => ({
@@ -18,6 +29,57 @@ const imageStyle = computed(() => ({
   transition: transformState.value.panning ? 'none' : 'transform 0.1s ease-out'
 }));
 
+// 🟢 [增加调试日志] 的 fitToScreen
+const fitToScreen = async () => {
+  await nextTick(); // 等待 DOM 更新
+  
+  const container = viewportRef.value;
+  const wrapper = wrapperRef.value;
+  
+  if (!container || !wrapper) return;
+
+  // 容器尺寸 (黑色区域)
+  const cW = container.clientWidth;
+  const cH = container.clientHeight;
+  
+  // 内容尺寸 (图片原始尺寸)
+  const wW = wrapper.offsetWidth;
+  const wH = wrapper.offsetHeight;
+
+  if (wW === 0 || wH === 0) return;
+
+  const scaleX = cW / wW;
+  const scaleY = cH / wH;
+  
+  // 计算缩放 (留 10% 边距)
+  let bestFit = Math.min(scaleX, scaleY, 1) * 0.9;
+  bestFit = Math.max(0.01, bestFit); // 允许缩得更小，防止超大图无法显示
+  
+  transformState.value = {
+    scale: bestFit,
+    panning: false,
+    pointX: 0,
+    pointY: 0,
+    startX: 0,
+    startY: 0
+  };
+  
+};
+
+const onImgLoad = (e) => {
+  // 🟢 1. 获取图片真实尺寸
+  const img = e.target;
+  const naturalWidth = img.naturalWidth || img.width;
+  const naturalHeight = img.naturalHeight || img.height;
+
+  // 确保调用了 store 更新
+  store.updateImageDimensions(naturalWidth, naturalHeight);
+
+  emit('img-load');
+  fitToScreen(); // 此时 wrapper 宽度已恢复正常，缩放会生效
+};
+
+// ... (交互事件保持不变，handleWheel, startDrag, resetView 等直接复制旧代码) ...
 const handleWheel = (e) => {
   e.preventDefault();
   const zoomIntensity = 0.1;
@@ -26,55 +88,43 @@ const handleWheel = (e) => {
   newScale = Math.min(Math.max(0.1, newScale), 5);
   transformState.value.scale = newScale;
 };
-
 const startDrag = (e) => {
   if (e.button !== 0) return;
   transformState.value.panning = true;
   transformState.value.startX = e.clientX - transformState.value.pointX;
   transformState.value.startY = e.clientY - transformState.value.pointY;
 };
-
 const onDrag = (e) => {
   if (!transformState.value.panning) return;
   e.preventDefault();
   transformState.value.pointX = e.clientX - transformState.value.startX;
   transformState.value.pointY = e.clientY - transformState.value.startY;
 };
-
 const stopDrag = () => { transformState.value.panning = false; };
-
-const resetView = () => {
-  transformState.value = { scale: 1, panning: false, pointX: 0, pointY: 0, startX: 0, startY: 0 };
-};
-
-// 监听 URL 变化自动重置视图
-watch(() => props.displayData.url, () => { resetView(); });
-
-// 暴露 resetView 方法给父组件 (通过 template ref 调用)
+const resetView = () => fitToScreen();
+watch(() => props.displayData.url, () => { transformState.value.pointX = 0; transformState.value.pointY = 0; });
 defineExpose({ resetView });
 </script>
 
 <template>
-  <div 
-    class="preview-area"
-    @wheel="handleWheel"
-    @mousedown="startDrag"
-    @mousemove="onDrag"
-    @mouseup="stopDrag"
-    @mouseleave="stopDrag"
-    @dblclick="resetView"
-  >
+  <div class="preview-area"
+    @wheel="handleWheel" @mousedown="startDrag" @mousemove="onDrag" @mouseup="stopDrag" @mouseleave="stopDrag" @dblclick="resetView">
+    
     <Transition name="fade">
       <LoadingSpinner v-if="isBusy" text="处理中..." mode="overlay" />
     </Transition>
 
-    <div v-if="displayData.url" class="viewport-container">
-      <div class="image-wrapper" :style="imageStyle">
+    <div v-if="displayData.url" class="viewport-container" ref="viewportRef">
+      
+      <div class="image-wrapper" :style="imageStyle" ref="wrapperRef">
+        
+        <component :is="activeLayerComponent" v-if="activeLayerComponent" />
+
         <img 
           :src="displayData.url" 
           class="main-img" 
           alt="Preview" 
-          @load="$emit('img-load')" 
+          @load="onImgLoad" 
           @error="$emit('img-error', $event)"
           draggable="false" 
         />
@@ -93,28 +143,39 @@ defineExpose({ resetView });
 </template>
 
 <style scoped>
-/* 原有的 preview-area, viewport-container, image-wrapper, main-img, status-badge 样式 */
+/* 背景等样式保持不变 */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
-.preview-area {
-  flex: 1; 
-  background: #1a1a1a;
+.preview-area { flex: 1; background: #1a1a1a; position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center; user-select: none; }
+.viewport-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; position: relative; overflow: hidden; }
+
+/* 🟢 [关键修复 1] 彻底移除尺寸限制 */
+/* 让 Wrapper 诚实地变成图片原本的大小（比如 6000x4000） */
+/* 这样 JS 算出来的 Scale 才是准确的 (比如 0.15) */
+.image-wrapper {
   position: relative;
-  overflow: hidden;
+  width: max-content; /* 强制撑开，不换行 */
+  height: max-content;
   display: flex;
   justify-content: center;
   align-items: center;
-  background-image: 
-    linear-gradient(45deg, #222 25%, transparent 25%), 
-    linear-gradient(-45deg, #222 25%, transparent 25%), 
-    linear-gradient(45deg, transparent 75%, #222 75%), 
-    linear-gradient(-45deg, transparent 75%, #222 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-  user-select: none; 
+  
+  transform-origin: center center;
+  will-change: transform;
+  
 }
-.viewport-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; position: relative; }
-.image-wrapper { display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; will-change: transform; transform-origin: center center; }
-.main-img { max-width: 80%; max-height: 80%; object-fit: contain; box-shadow: 0 10px 30px rgba(0,0,0,0.5); pointer-events: none; }
+
+/* 🟢 [关键修复 2] 图片还原真身 */
+.main-img {
+  display: block;
+  /* ❌ 删掉 max-width/height */
+  /* 让图片以原始分辨率渲染，JS 负责把它缩放回屏幕内 */
+  width: auto;
+  height: auto; 
+  
+  box-shadow: 0 50px 100px rgba(0,0,0,0.5); /* 阴影大一点，因为图片本身很大 */
+  pointer-events: none; 
+}
+
 .status-badge { position: absolute; top: 20px; right: 20px; padding: 6px 12px; border-radius: 4px; font-size: 0.8em; font-weight: bold; color: white; z-index: 10; pointer-events: none; }
 .status-badge.preset { background: rgba(100, 100, 100, 0.8); }
 .status-badge.result { background: rgba(16, 185, 129, 0.9); }

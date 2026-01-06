@@ -1,7 +1,7 @@
 // src/composables/useBatchProcess.js
 import { ref, computed, onUnmounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { store } from '../store.js';
+import { store } from '../store/index.js';
 
 // 🟢 辅助函数：构建上下文
 function buildBatchContext() {
