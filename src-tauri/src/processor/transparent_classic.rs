@@ -1,5 +1,5 @@
 use image::{DynamicImage, GenericImageView, Rgba, imageops};
-use ab_glyph::{FontRef, PxScale};
+use ab_glyph::{Font, FontArc, PxScale};
 // 🟢 1. 引入 draw_text_mut
 use imageproc::drawing::{text_size, draw_text_mut};
 use std::time::Instant;
@@ -23,14 +23,11 @@ use super::resize_image_by_height;
 // 策略 2: 经典透明处理器 (TransparentClassic)
 // ==========================================
 pub struct TransparentClassicProcessor {
-    pub font_data: Arc<Vec<u8>>,
+    pub font_data: FontArc,
 }
 
 impl FrameProcessor for TransparentClassicProcessor {
     fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
-        let font = FontRef::try_from_slice(&self.font_data)
-            .map_err(|_| "模糊模式: 标准字体解析失败")?;
-            
         let assets = BlurStyleResources {
             logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
         };
@@ -45,7 +42,7 @@ impl FrameProcessor for TransparentClassicProcessor {
         
         Ok(process(
             img, 
-            &font, 
+            &self.font_data, 
             input, 
             &assets
         ))
@@ -57,6 +54,7 @@ pub struct BlurStyleResources {
     pub logo: Option<Arc<DynamicImage>>, 
 }
 
+#[allow(dead_code)]
 pub struct BlurInput<'a> {
     pub brand: &'a str,
     pub model: &'a str,
@@ -111,9 +109,9 @@ impl Default for BlurConfig {
 // ==========================================
 // 3. 核心处理逻辑
 // ==========================================
-pub fn process(
+pub fn process<F: Font>(
     img: &DynamicImage,
-    font: &FontRef,
+    font: &F,
     input: BlurInput,
     assets: &BlurStyleResources 
 ) -> DynamicImage {

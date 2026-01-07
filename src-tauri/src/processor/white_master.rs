@@ -1,9 +1,8 @@
 use image::{DynamicImage, Rgba, GenericImageView, RgbaImage};
-use ab_glyph::{FontRef, PxScale};
+use ab_glyph::{Font, FontArc, PxScale};
 use imageproc::drawing::{draw_text_mut, draw_filled_rect_mut};
 use imageproc::rect::Rect;
 use std::cmp::max;
-use std::sync::Arc;
 use std::time::Instant;
 use rayon::prelude::*;
 
@@ -18,19 +17,13 @@ use crate::processor::traits::FrameProcessor; // 🟢 必须确保 Cargo.toml �
 // 策略 5: 大师白底处理器 (WhiteMaster)
 // ==========================================
 pub struct WhiteMasterProcessor {
-    pub main_font: Arc<Vec<u8>>,   // 参数字体
-    pub script_font: Arc<Vec<u8>>, // 手写体
-    pub serif_font: Arc<Vec<u8>>,  // 标题体
+    pub main_font: FontArc,   // 参数字体
+    pub script_font: FontArc, // 手写体
+    pub serif_font: FontArc,  // 标题体
 }
 
 impl FrameProcessor for WhiteMasterProcessor {
     fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
-        let main = FontRef::try_from_slice(&self.main_font)
-            .map_err(|_| "WhiteMaster: 参数字体解析失败")?;
-        let script = FontRef::try_from_slice(&self.script_font)
-            .map_err(|_| "WhiteMaster: 手写字体解析失败")?;
-        let serif = FontRef::try_from_slice(&self.serif_font)
-            .map_err(|_| "WhiteMaster: 衬线字体解析失败")?;
 
         // 🟢 使用 WhiteMasterInput 构造输入数据
         let input = WhiteMasterInput {
@@ -48,9 +41,9 @@ impl FrameProcessor for WhiteMasterProcessor {
         Ok(process(
             img, 
             input, 
-            &main, 
-            &script, 
-            &serif
+            &self.main_font, 
+            &self.script_font, 
+            &self.serif_font
         ))
     }
 }
@@ -168,12 +161,12 @@ fn fast_compose_white_canvas(img: &DynamicImage, border_size: u32, bottom_height
 // 4. 核心处理逻辑
 // ==========================================
 
-pub fn process(
+pub fn process<F: Font>(
     img: &DynamicImage,
     input: WhiteMasterInput,
-    main_font: &FontRef,
-    script_font: &FontRef,
-    serif_font: &FontRef,
+    main_font: &F,
+    script_font: &F,
+    serif_font: &F,
 ) -> DynamicImage {
     let start_total = Instant::now();
     let cfg = WhiteMasterLayoutConfig::default();
@@ -283,7 +276,7 @@ pub fn process(
 // ==========================================
 
 /// 绘制宽字距文本 (PHOTOGRAPH)
-fn draw_wide_text(canvas: &mut DynamicImage, center_x: i32, y: i32, text: &str, font: &FontRef, size: f32, color: Rgba<u8>) {
+fn draw_wide_text<F: Font>(canvas: &mut DynamicImage, center_x: i32, y: i32, text: &str, font: &F, size: f32, color: Rgba<u8>) {
     let scale = PxScale { x: size, y: size };
     let tracking = size * 0.4; 
     let mut total_width = 0.0;
@@ -306,7 +299,7 @@ fn draw_wide_text(canvas: &mut DynamicImage, center_x: i32, y: i32, text: &str, 
 }
 
 /// 绘制参数列 (数值 + 标签)
-fn draw_column_absolute(canvas: &mut DynamicImage, x: i32, val_y: i32, lbl_y: i32, value: &str, label: &str, font: &FontRef, val_size: f32, lbl_size: f32, val_color: Rgba<u8>, lbl_color: Rgba<u8>) {
+fn draw_column_absolute<F: Font>(canvas: &mut DynamicImage, x: i32, val_y: i32, lbl_y: i32, value: &str, label: &str, font: &F, val_size: f32, lbl_size: f32, val_color: Rgba<u8>, lbl_color: Rgba<u8>) {
     draw_centered_text(canvas, value, x, val_y, font, PxScale { x: val_size, y: val_size }, val_color);
     draw_centered_text(canvas, label, x, lbl_y, font, PxScale { x: lbl_size, y: lbl_size }, lbl_color);
 }
@@ -333,7 +326,7 @@ fn draw_separator(canvas: &mut DynamicImage, x: i32, center_y: f32, height: f32,
 }
 
 /// 绘制居中文本
-fn draw_centered_text(canvas: &mut DynamicImage, text: &str, x: i32, y: i32, font: &FontRef, scale: PxScale, color: Rgba<u8>) {
+fn draw_centered_text<F: Font>(canvas: &mut DynamicImage, text: &str, x: i32, y: i32, font: &F, scale: PxScale, color: Rgba<u8>) {
     let (text_w, _text_h) = imageproc::drawing::text_size(scale, font, text);
     let draw_x = x - (text_w as i32 / 2);
     draw_text_mut(canvas, color, draw_x, y, scale, font, text);

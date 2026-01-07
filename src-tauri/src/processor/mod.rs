@@ -7,8 +7,6 @@ pub mod white_polaroid;
 pub mod white_master;
 pub mod white_modern; // 🟢
 pub mod signature;
-
-use ab_glyph::FontArc;
 use image::{DynamicImage, imageops};
 
 
@@ -92,18 +90,8 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
         },
         // 🟢 修复 Signature 模式的初始化逻辑
         StyleOptions::Signature { text, font_scale, bottom_ratio } => {
-            
-            // 1. 从资源管理器获取原始数据 (Arc<Vec<u8>>)
-            let font_data_arc = resources::get_font(FontFamily::InterDisplay, FontWeight::Medium);
-            
-            // 2. 🟢 核心修复：手动转换为 FontArc
-            // 因为我们要维持现有架构，这里进行一次内存复制 (to_vec) 是最稳妥的
-            // 这解决了 "expected FontRef found Arc" 的问题
-            let font = FontArc::try_from_vec(font_data_arc.to_vec())
-                .expect("Failed to parse font data");
-
             Box::new(SignatureProcessor {
-                font, // 现在这里是 FontArc 类型了，匹配结构体定义
+                font: resources::get_font(FontFamily::InterDisplay, FontWeight::Medium),
                 text: text.clone(),
                 font_scale: *font_scale,
                 bottom_ratio: *bottom_ratio,

@@ -1,5 +1,5 @@
 use image::{DynamicImage, ImageBuffer, Rgba, imageops, GenericImageView};
-use ab_glyph::{FontRef, PxScale};
+use ab_glyph::{Font, FontArc, PxScale};
 use imageproc::drawing::{draw_text_mut, text_size, draw_filled_rect_mut};
 use imageproc::rect::Rect;
 use std::sync::Arc;
@@ -14,14 +14,12 @@ use crate::resources::{self, LogoType};
 use super::resize_image_by_height; 
 
 pub struct WhiteClassicProcessor {
-    pub font_data: Arc<Vec<u8>>,
+    pub font_data: FontArc,
 }
 
 // 3. 🟢 [移入] 实现 Trait
 impl FrameProcessor for WhiteClassicProcessor {
     fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
-        let font = FontRef::try_from_slice(&self.font_data)
-            .map_err(|_| "白底模式: 字体解析失败")?;
         
         let logo_type = LogoType::Wordmark;
         let logo_img = resources::get_logo(ctx.brand, logo_type);
@@ -38,7 +36,7 @@ impl FrameProcessor for WhiteClassicProcessor {
             &ctx.brand.to_string(), 
             &ctx.model_name,        
             &params_str,            
-            &font, 
+            &self.font_data, 
             &assets                 
         ))
     }
@@ -183,8 +181,8 @@ fn calculate_metrics(w: u32, h: u32, cfg: &LayoutConfig) -> Metrics {
 // ==========================================
 // 辅助：横构图测量
 // ==========================================
-fn measure_right_width_land(
-    font: &FontRef,
+fn measure_right_width_land<F: Font>(
+    font: &F,
     params: &str,
     assets: &WhiteStyleResources,
     metrics: &Metrics,
@@ -217,9 +215,9 @@ fn measure_right_width_land(
 // ==========================================
 // 4. 绘图实现 (横构图)
 // ==========================================
-fn draw_left_section_landscape(
+fn draw_left_section_landscape<F: Font>(
     canvas: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
-    font: &FontRef,
+    font: &F,
     text: &str,
     metrics: &Metrics,
     cfg: &LayoutConfig,
@@ -243,9 +241,9 @@ fn draw_left_section_landscape(
     draw_text_mut(canvas, Rgba([0, 0, 0, 255]), metrics.land_padding_x, text_y, scale, font, text);
 }
 
-fn draw_right_section_landscape(
+fn draw_right_section_landscape<F: Font>(
     canvas: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
-    font: &FontRef,
+    font: &F,
     params: &str,
     assets: &WhiteStyleResources,
     width: u32,
@@ -287,9 +285,9 @@ fn draw_right_section_landscape(
 // ==========================================
 // 🟢 竖构图专用布局 (Logo | Line | StackedText)
 // ==========================================
-fn draw_portrait_layout(
+fn draw_portrait_layout<F: Font>(
     canvas: &mut ImageBuffer<Rgba<u8>, Vec<u8>>,
-    font: &FontRef,
+    font: &F,
     text_model: &str,
     text_params: &str,
     assets: &WhiteStyleResources,
@@ -366,12 +364,12 @@ fn draw_portrait_layout(
 // ==========================================
 // 5. 主入口
 // ==========================================
-pub fn process(
+pub fn process<F: Font>(
     img: &DynamicImage,
     camera_make: &str,
     camera_model: &str,
     params: &str,
-    font: &FontRef,
+    font: &F,
     assets: &WhiteStyleResources
 ) -> DynamicImage {
     let t0 = Instant::now();

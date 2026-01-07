@@ -1,7 +1,8 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Mutex};
 use std::path::{Path, PathBuf};
 use std::fs;
+use ab_glyph::FontArc;
 use once_cell::sync::Lazy;
 
 
@@ -55,43 +56,43 @@ impl FontKey {
     }
 }
 
-type FontCache = HashMap<FontKey, Arc<Vec<u8>>>;
+type FontCache = HashMap<FontKey, FontArc>;
 
 static FONT_CACHE: Lazy<Mutex<FontCache>> = Lazy::new(|| {
     Mutex::new(HashMap::new())
 });
 
-/// **获取字体资源**
-pub fn get_font(family: FontFamily, weight: FontWeight) -> Arc<Vec<u8>> {
+/// **获取字体资源 (返回解析好的字体对象)**
+/// 
+/// 优势：
+/// 1. 缓存的是解析后的字体对象，避免重复 parse。
+/// 2. 调用者拿来即用，无需再次 try_from_slice。
+pub fn get_font(family: FontFamily, weight: FontWeight) -> FontArc {
     let key = FontKey { family, weight };
 
     // 1. 查缓存
+    // 🟢 [修改点] 这里的 cache 已经是 HashMap<FontKey, FontArc>
     let mut cache = FONT_CACHE.lock().unwrap();
-    if let Some(data) = cache.get(&key) {
-        return data.clone();
+    if let Some(font) = cache.get(&key) {
+        return font.clone(); // FontArc 克隆开销很小 (类似 Arc::clone)
     }
 
     // 2. 确定文件名
     let filename = key.filename();
     
-    // 3. 🟢 [核心修改] 智能路径查找策略
-    // 策略 A: 优先使用 setup.rs 初始化的路径 (通常指向 target/debug/assets 或 安装后的资源目录)
+    // 3. 智能路径查找策略 (保持原逻辑不变)
     let base_dir_guard = FONT_BASE_DIR.lock().unwrap();
     
-    // 构造首选路径
     let primary_path = if let Some(base) = base_dir_guard.as_deref() {
         base.join(filename)
     } else {
-        // 如果未初始化，默认找相对路径
         Path::new("assets/fonts").join(filename)
     };
 
-    // 4. 检查文件是否存在，如果不存在，尝试 "开发环境回退策略"
+    // 4. 路径回退检查 (保持原逻辑不变)
     let final_path = if primary_path.exists() {
         primary_path
     } else {
-        // 🟢 [Dev Fallback] 如果首选路径找不到，尝试去源码目录找
-        // CARGO_MANIFEST_DIR 是编译时环境变量，指向 Cargo.toml 所在的目录 (即 src-tauri)
         let source_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("assets/fonts")
             .join(filename);
@@ -100,23 +101,32 @@ pub fn get_font(family: FontFamily, weight: FontWeight) -> Arc<Vec<u8>> {
             println!("⚠️ [Resources] 首选路径缺失，回退到源码目录加载: {:?}", source_path);
             source_path
         } else {
-            // 如果源码目录也没有，那就真的没了，还是报错原路径让用户检查
             primary_path 
         }
     };
 
     println!("📦 [LazyLoad] Font: {:?} -> {:?}", key, final_path);
 
+    // 5. 读取文件字节
     let data = fs::read(&final_path).unwrap_or_else(|e| {
-        // 打印详细错误信息，帮助调试
         eprintln!("❌ 严重错误: 无法读取字体文件!");
         eprintln!("   - 尝试路径: {:?}", final_path);
         eprintln!("   - 系统错误: {}", e);
-        vec![]
+        // 如果读不到文件，这里可以 Panic，或者返回一个内嵌的 Fallback 字体
+        // 这里暂时 panic，因为没有字体后续无法工作
+        panic!("无法加载核心字体资源: {:?}", final_path);
     });
 
-    let arc_data = Arc::new(data);
-    cache.insert(key, arc_data.clone());
+    // 6. 🟢 [核心修改] 将字节解析为 FontArc
+    // FontArc::try_from_vec 会接管 data 的所有权，不会发生拷贝
+    let font = FontArc::try_from_vec(data).unwrap_or_else(|_| {
+        eprintln!("❌ 严重错误: 字体文件格式损坏!");
+        eprintln!("   - 路径: {:?}", final_path);
+        panic!("无法解析字体文件");
+    });
+
+    // 7. 存入缓存并返回
+    cache.insert(key, font.clone());
     
-    arc_data
+    font
 }

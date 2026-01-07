@@ -1,5 +1,5 @@
 use image::{DynamicImage, Rgba, RgbaImage, imageops, GenericImageView}; 
-use ab_glyph::{FontRef, PxScale};
+use ab_glyph::{Font, FontArc, PxScale};
 // 🟢 1. 引入标准绘图函数 draw_text_mut
 use imageproc::drawing::{text_size, draw_text_mut};
 use std::sync::Arc;
@@ -21,13 +21,12 @@ use super::resize_image_by_height;
 // 策略 4: 拍立得白底处理器 (WhitePolaroid)
 // ==========================================
 pub struct WhitePolaroidProcessor {
-    pub font_data: Arc<Vec<u8>>,
+    pub font_data: FontArc,
 }
 
 impl FrameProcessor for WhitePolaroidProcessor {
     fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
-        let font = FontRef::try_from_slice(&self.font_data)
-            .map_err(|_| "Polaroid模式: 字体解析失败")?;
+        
 
         let assets = PolaroidResources {
             logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
@@ -43,7 +42,7 @@ impl FrameProcessor for WhitePolaroidProcessor {
 
         Ok(process(
             img, 
-            &font, 
+            &self.font_data, 
             input, 
             &assets
         ))
@@ -54,6 +53,7 @@ pub struct PolaroidResources {
     pub logo: Option<Arc<DynamicImage>>,
 }
 
+#[allow(dead_code)]
 pub struct PolaroidInput<'a> {
     pub brand: &'a str,
     pub model: &'a str,
@@ -98,9 +98,9 @@ impl Default for PolaroidConfig {
 // ==========================================
 // 3. 核心处理函数
 // ==========================================
-pub fn process(
+pub fn process<F: Font>(
     img: &DynamicImage,
-    font: &FontRef,
+    font: &F,
     input: PolaroidInput, 
     assets: &PolaroidResources,
 ) -> DynamicImage {
