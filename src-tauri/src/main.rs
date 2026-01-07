@@ -35,6 +35,7 @@ fn main() {
             commands::common::stop_batch_process,
             commands::common::check_file_exif,
             // 其他遗留命令
+            commands::common::read_local_image_blob,
             metadata::filter_files,
             metadata::scan_folder,
         ])

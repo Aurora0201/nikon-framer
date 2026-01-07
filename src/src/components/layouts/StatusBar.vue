@@ -1,5 +1,5 @@
 <script setup>
-import { store } from '../../store.js';
+import { store } from '../../store/index.js';
 import { useBatchProcess } from '../../composables/useBatchProcess.js';
 
 // 引入批处理逻辑

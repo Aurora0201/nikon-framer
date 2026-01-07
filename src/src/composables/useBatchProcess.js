@@ -1,32 +1,73 @@
 // src/composables/useBatchProcess.js
 import { ref, computed, onUnmounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
-import { store } from '../store.js';
+import { store } from '../store/index.js';
+// 🟢 1. 引入注册表，用于查询配置
+import { frameRegistry } from '../frames/registry.js';
 
-// 🟢 辅助函数：构建上下文
+
+// 🟢 辅助函数：构建上下文 (OCP 通用版)
 function buildBatchContext() {
   let targetStyleId = store.activePresetId;
 
-  // 1. 容错：如果未选中，尝试获取当前列表第一个
+  // 1. 容错逻辑：如果未选中，尝试获取当前列表第一个
   if (!targetStyleId) {
     const currentPresets = store.currentPresets;
     if (currentPresets && currentPresets.length > 0) {
       targetStyleId = currentPresets[0].id;
+    } else {
+      console.warn("⚠️ [Batch] 未找到有效的 Style ID，使用默认兜底值");
+      return { style: 'BottomWhite' }; 
     }
-  }
-
-  // 2. 兜底：如果还是没有，使用默认值
-  if (!targetStyleId) {
-    console.warn("⚠️ [Batch] 未找到有效的 Style ID，使用默认兜底值");
-    return { style: 'BottomWhite' }; 
   }
 
   console.log(`🔧 [Batch] 锁定后端 Style ID: ${targetStyleId}`);
 
-  // 根据后端协议，直接发送 style 字段即可
-  return { 
+  // 2. 获取当前模式的配置对象 (从注册表中查表)
+  const config = frameRegistry.get(targetStyleId);
+
+  // 3. 构建基础 Payload
+  const payload = { 
     style: targetStyleId 
   };
+
+  // 4. 🟢 核心 OCP 逻辑：动态参数注入 & 类型安全转换
+  // 只要配置里定义了 defaultParams，我们就认为它是需要参数的
+  if (config && config.defaultParams) {
+    console.log(`📝 [Batch] 检测到动态参数模式，正在根据 Schema 注入参数...`);
+
+    // 遍历 Schema (默认参数)，而不是遍历用户输入
+    // 这样做的好处是：只发送后端认识的字段，且类型以默认值为准
+    Object.keys(config.defaultParams).forEach(key => {
+      const defaultValue = config.defaultParams[key];
+      const userValue = store.modeParams[key];
+
+      // A. 如果用户没填这个值（或者 store 里没有），直接回退到默认值
+      if (userValue === undefined || userValue === null) {
+        payload[key] = defaultValue;
+        return;
+      }
+
+      // B. 智能类型推断 (Smart Casting)
+      const expectedType = typeof defaultValue;
+
+      if (expectedType === 'number') {
+        // 强制转为数字 (防止 HTML input 传回字符串 "0.05")
+        const parsed = parseFloat(userValue);
+        payload[key] = isNaN(parsed) ? defaultValue : parsed;
+      } 
+      else if (expectedType === 'boolean') {
+        // 强制转为布尔值
+        payload[key] = Boolean(userValue);
+      } 
+      else {
+        // 字符串或其他类型，直接赋值
+        payload[key] = userValue;
+      }
+    });
+  }
+
+  return payload;
 }
 
 export function useBatchProcess() {
@@ -80,11 +121,11 @@ export function useBatchProcess() {
     let skippedCount = 0;
 
     try {
-      // 调用我们在 main.rs 新增的 filter_unprocessed_files 命令
+      // 🟢 修改：传递完整的 context 对象，而不仅仅是 style 字符串
+      // Rust 端会根据 context.options.is_editable() 决定是否过滤
       filesToProcess = await invoke('filter_unprocessed_files', { 
         paths: allPaths, 
-        // 传递字符串 ID (如 "BottomWhite")，Rust 端会自动拼接后缀检查
-        style: contextPayload.style 
+        context: contextPayload 
       });
       
       skippedCount = allPaths.length - filesToProcess.length;
