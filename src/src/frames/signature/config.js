@@ -1,6 +1,7 @@
 export const config = {
   category: 'Signature', // 🟢 签名模式自成一派
-  label: '个性签名',
+  label: '简约签名',
+  desc: '自定义摄影师签名',
   features: {
     useRawPreview: true // 开启 Blob 加载
   },
@@ -14,5 +15,5 @@ export const config = {
   },
 
   // 签名模式使用白底作为预设图
-  getPresetUrl: () => new URL('../../assets/presets/white_standard.jpg', import.meta.url).href
+  getPresetUrl: () => new URL('../../assets/presets/signature.jpg', import.meta.url).href
 };

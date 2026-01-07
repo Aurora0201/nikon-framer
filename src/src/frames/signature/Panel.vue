@@ -42,7 +42,7 @@ import { store } from '../../store/index.js';
       <input 
         type="range" 
         min="0.01" 
-        max="0.20" 
+        max="0.10" 
         step="0.005"
         v-model.number="store.modeParams.bottomRatio" 
         class="range-input"

@@ -1,30 +1,34 @@
 <script setup>
-import { computed, watch } from 'vue';
+import { computed } from 'vue'; // 🟢 新增 ref, onMounted, nextTick
 import { store } from '../../store/index.js';
 
 
 const dynamicFontSize = computed(() => {
   const imgW = store.imageDimensions?.width;
-  // 🟢 从 modeParams 读取
   const scale = store.modeParams.fontScale || 0.05; 
   if (!imgW) return '150px';
   return `${imgW * scale}px`;
 });
 
 const dynamicBottom = computed(() => {
-  // 🟢 从 modeParams 读取
   const ratio = store.modeParams.bottomRatio || 0.06;
   return `${ratio * 100}%`;
 });
+
 
 </script>
 
 <template>
   <div class="signature-layer-container">
     
+    <div :style="debugLineStyle"></div>
+
     <div class="sig-wrapper" :style="{ bottom: dynamicBottom }" >
-        <span class="sig-text" :style="{ fontSize: dynamicFontSize }">
-            {{ store.modeParams.text ? store.modeParams.text : '请输入文字' }}
+        <span 
+          class="sig-text debug-outline" 
+          :style="{ fontSize: dynamicFontSize }"
+        >
+            {{ store.modeParams.text ? store.modeParams.text : '©Masterpiece' }}
         </span>
     </div>
 
@@ -38,32 +42,25 @@ const dynamicBottom = computed(() => {
   width: 100%; height: 100%;
   pointer-events: none;
   z-index: 20;
-
 }
 
 .sig-wrapper {
   position: absolute;
-  /* bottom: 6%; 距离底部 6% */
+  /* bottom 由 style 绑定控制 */
   width: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  /* 🧹 已移除调试边框 */
-
-
 }
 
 .sig-text {
-  
-  /* 🟢 字体颜色：稍微带一点透明度的白，更有质感 */
+  /* 🟢 1. 消除 CSS 行高导致的偏移，让 CSS 盒子紧贴文字 */
+  line-height: 1;
+  /* 🟢 字体颜色 */
   color: rgba(255, 255, 255, 0.95);
   
-  font-family: 'Inter Display', system-ui, sans-serif;
+  font-family: 'Inter Display';
   font-weight: 500;
-  letter-spacing: 0.05em;
   white-space: nowrap;
-  
-  /* 🟢 阴影：增加立体感，防止在浅色背景上看不清 */
-  text-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
 </style>
