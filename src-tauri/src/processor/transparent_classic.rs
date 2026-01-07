@@ -9,13 +9,49 @@ use crate::graphics::effects::generate_blurred_background;
 // 🟢 新增引入
 use crate::graphics::shadow::ShadowProfile;
 
-use crate::graphics;
+use crate::resources::LogoType;
+use crate::{graphics, resources};
+use crate::parser::models::ParsedImageContext;
+use crate::processor::traits::FrameProcessor;
 // 引入父模块通用工具
 use super::resize_image_by_height;
 
 // ==========================================
 // 1. 数据结构定义
 // ==========================================
+// ==========================================
+// 策略 2: 经典透明处理器 (TransparentClassic)
+// ==========================================
+pub struct TransparentClassicProcessor {
+    pub font_data: Arc<Vec<u8>>,
+}
+
+impl FrameProcessor for TransparentClassicProcessor {
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
+        let font = FontRef::try_from_slice(&self.font_data)
+            .map_err(|_| "模糊模式: 标准字体解析失败")?;
+            
+        let assets = BlurStyleResources {
+            logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
+        };
+        
+        let params_str = ctx.params.format_standard();
+        
+        let input = BlurInput {
+            brand: &ctx.brand.to_string(),
+            model: &ctx.model_name,
+            params: &params_str,
+        };
+        
+        Ok(process(
+            img, 
+            &font, 
+            input, 
+            &assets
+        ))
+    }
+}
+
 
 pub struct BlurStyleResources {
     pub logo: Option<Arc<DynamicImage>>, 

@@ -1,10 +1,14 @@
 use image::{DynamicImage, Rgba, RgbaImage, imageops, GenericImageView}; 
 use ab_glyph::{FontRef, PxScale};
 // 🟢 1. 引入标准绘图函数 draw_text_mut
-use imageproc::drawing::{text_size, draw_text_mut}; 
+use imageproc::drawing::{text_size, draw_text_mut};
 use std::sync::Arc;
 use std::time::Instant;
 use std::cmp::min;
+
+use crate::parser::models::ParsedImageContext;
+use crate::processor::traits::FrameProcessor;
+use crate::resources::{self, LogoType};
 
 // 复用父模块的通用工具 (resize_image_by_height)
 use super::resize_image_by_height;
@@ -12,6 +16,39 @@ use super::resize_image_by_height;
 // ==========================================
 // 1. 数据结构
 // ==========================================
+
+// ==========================================
+// 策略 4: 拍立得白底处理器 (WhitePolaroid)
+// ==========================================
+pub struct WhitePolaroidProcessor {
+    pub font_data: Arc<Vec<u8>>,
+}
+
+impl FrameProcessor for WhitePolaroidProcessor {
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
+        let font = FontRef::try_from_slice(&self.font_data)
+            .map_err(|_| "Polaroid模式: 字体解析失败")?;
+
+        let assets = PolaroidResources {
+            logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
+        };
+        
+        let params_str = ctx.params.format_standard();
+
+        let input = PolaroidInput {
+            brand: &ctx.brand.to_string(),
+            model: &ctx.model_name,
+            params: &params_str,
+        };
+
+        Ok(process(
+            img, 
+            &font, 
+            input, 
+            &assets
+        ))
+    }
+}
 
 pub struct PolaroidResources {
     pub logo: Option<Arc<DynamicImage>>,

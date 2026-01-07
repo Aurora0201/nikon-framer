@@ -1,6 +1,26 @@
 /* =========================================
    1. 全局配置与变量 (:root & Base)
    ========================================= */
+
+@font-face {
+  font-family: 'Inter Display';
+  /* 尝试往上找，直到找到 src-tauri */
+  /* 注意：根据你的 main.css 位置调整 ../ 的数量 */
+  src: url('@fonts/InterDisplay-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* 同样配置 Bold */
+@font-face {
+  font-family: 'Inter Display';
+  src: url('@fonts/InterDisplay-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* --- 品牌色与主题色 (Nikon Theme) --- */
   --nikon-yellow: #ffe100;

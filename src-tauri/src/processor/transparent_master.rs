@@ -3,13 +3,49 @@
 use image::{DynamicImage, Rgba, GenericImageView, imageops};
 use ab_glyph::{FontRef, PxScale};
 use imageproc::drawing::{draw_text_mut, draw_line_segment_mut};
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
-use crate::graphics::generate_blurred_background;
+use crate::{graphics::generate_blurred_background, parser::models::ParsedImageContext, processor::traits::FrameProcessor};
 
 // ==========================================
 // 1. 数据结构定义
 // ==========================================
+// ==========================================
+// 策略 3: 大师透明处理器 (TransparentMaster)
+// ==========================================
+pub struct TransparentMasterProcessor {
+    pub main_font: Arc<Vec<u8>>,   // 参数字体
+    pub script_font: Arc<Vec<u8>>, // 手写体
+    pub serif_font: Arc<Vec<u8>>,  // 标题体
+}
+
+impl FrameProcessor for TransparentMasterProcessor {
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
+        let main = FontRef::try_from_slice(&self.main_font).unwrap();
+        let script = FontRef::try_from_slice(&self.script_font).unwrap();
+        let serif = FontRef::try_from_slice(&self.serif_font).unwrap();
+
+        // 构造输入数据
+        let input = TransparentMasterInput {
+            iso: ctx.params.iso.map(|v| v.to_string()).unwrap_or_default(),
+            aperture: ctx.params.aperture.map(|v| v.to_string()).unwrap_or_default(),
+            shutter: ctx.params.shutter_speed
+                .replace("s", "")
+                .trim()
+                .to_string(),
+            focal: ctx.params.focal_length.map(|v| v.to_string()).unwrap_or_default(),
+        };
+
+        Ok(process(
+            img, 
+            input, 
+            &main, 
+            &script, 
+            &serif
+        ))
+    }
+}
+
 
 /// 🟢 [新增] Master 模式专用输入参数
 /// 用于接收已经清洗好的、分拆的参数

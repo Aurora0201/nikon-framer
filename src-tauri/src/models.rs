@@ -36,7 +36,18 @@ pub enum StyleOptions {
 
     #[serde(rename_all = "camelCase")]
     WhiteModern, // 🟢 新增
-
+    // ===================================
+    // 2. 🟢 带参数模式 (Struct Variants)
+    // ===================================
+    // 当前端传 "style": "Signature" 时，
+    // Serde 会自动寻找同级字段 text, fontScale 等
+    #[serde(rename_all = "camelCase")] 
+    Signature {
+        text: String,
+        font_scale: f32,    // 对应 JSON: fontScale
+        bottom_ratio: f32,  // 对应 JSON: bottomRatio
+        // color: String,   // 预留: 如果以后要传颜色
+    },
 }
 
 // 🟢 新增：为枚举实现方法
@@ -49,7 +60,19 @@ impl StyleOptions {
             Self::WhitePolaroid => "WhitePolaroid",
             Self::WhiteMaster => "WhiteMaster",
             Self::WhiteModern => "WhiteModern",
+            // 🟢 签名模式的后缀
+            Self::Signature { .. } => "Signature",
             // 以后新增样式，只需要在这里加一行
+        }
+    }
+
+    // 🟢 新增：判断该模式是否“可编辑/参数敏感”
+    // 如果是可编辑模式，就不应该进行“跳过重复文件”的检查，
+    // 因为用户可能改了签名内容，即使文件名没变，也需要重新生成。
+    pub fn is_editable(&self) -> bool {
+        match self {
+            Self::Signature { .. } => true, // 签名模式是可变的
+            _ => false,                     // 其他模式是静态的
         }
     }
 }

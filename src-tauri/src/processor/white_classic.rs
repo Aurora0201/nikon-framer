@@ -6,8 +6,46 @@ use std::sync::Arc;
 use std::cmp::min;
 use std::time::Instant;
 
+use crate::parser::models::ParsedImageContext;
+use crate::processor::traits::FrameProcessor;
+use crate::resources::{self, LogoType};
+
 // 引入父模块通用工具
 use super::resize_image_by_height; 
+
+pub struct WhiteClassicProcessor {
+    pub font_data: Arc<Vec<u8>>,
+}
+
+// 3. 🟢 [移入] 实现 Trait
+impl FrameProcessor for WhiteClassicProcessor {
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
+        let font = FontRef::try_from_slice(&self.font_data)
+            .map_err(|_| "白底模式: 字体解析失败")?;
+        
+        let logo_type = LogoType::Wordmark;
+        let logo_img = resources::get_logo(ctx.brand, logo_type);
+
+        let assets = WhiteStyleResources {
+            logo: logo_img,
+        };
+
+        let params_str = ctx.params.format_standard();
+
+        // 调用本文件下方的具体处理函数
+        Ok(process(
+            img, 
+            &ctx.brand.to_string(), 
+            &ctx.model_name,        
+            &params_str,            
+            &font, 
+            &assets                 
+        ))
+    }
+}
+
+
+
 
 // ==========================================
 // 1. 资源定义

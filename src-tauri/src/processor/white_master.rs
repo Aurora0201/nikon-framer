@@ -3,12 +3,58 @@ use ab_glyph::{FontRef, PxScale};
 use imageproc::drawing::{draw_text_mut, draw_filled_rect_mut};
 use imageproc::rect::Rect;
 use std::cmp::max;
+use std::sync::Arc;
 use std::time::Instant;
-use rayon::prelude::*; // 🟢 必须确保 Cargo.toml 中开启了 image 的 rayon 特性或单独引入了 rayon
+use rayon::prelude::*;
+
+use crate::parser::models::ParsedImageContext;
+use crate::processor::traits::FrameProcessor; // 🟢 必须确保 Cargo.toml 中开启了 image 的 rayon 特性或单独引入了 rayon
 
 // ==========================================
 // 1. 数据结构定义
 // ==========================================
+
+// ==========================================
+// 策略 5: 大师白底处理器 (WhiteMaster)
+// ==========================================
+pub struct WhiteMasterProcessor {
+    pub main_font: Arc<Vec<u8>>,   // 参数字体
+    pub script_font: Arc<Vec<u8>>, // 手写体
+    pub serif_font: Arc<Vec<u8>>,  // 标题体
+}
+
+impl FrameProcessor for WhiteMasterProcessor {
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
+        let main = FontRef::try_from_slice(&self.main_font)
+            .map_err(|_| "WhiteMaster: 参数字体解析失败")?;
+        let script = FontRef::try_from_slice(&self.script_font)
+            .map_err(|_| "WhiteMaster: 手写字体解析失败")?;
+        let serif = FontRef::try_from_slice(&self.serif_font)
+            .map_err(|_| "WhiteMaster: 衬线字体解析失败")?;
+
+        // 🟢 使用 WhiteMasterInput 构造输入数据
+        let input = WhiteMasterInput {
+            iso: ctx.params.iso.map(|v| v.to_string()).unwrap_or_default(),
+            aperture: ctx.params.aperture.map(|v| v.to_string()).unwrap_or_default(),
+            // 清洗快门速度字符串 (去除 's', 去除空格)
+            shutter: ctx.params.shutter_speed
+                .replace("s", "")
+                .trim()
+                .to_string(),
+            focal: ctx.params.focal_length.map(|v| v.to_string()).unwrap_or_default(),
+        };
+
+        // 调用 white_master 模块的处理逻辑
+        Ok(process(
+            img, 
+            input, 
+            &main, 
+            &script, 
+            &serif
+        ))
+    }
+}
+
 
 /// Master 模式专用输入参数
 /// 接收清洗后的参数字符串 (如 "100", "2.8", "50", "1/1000")
