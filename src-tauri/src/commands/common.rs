@@ -144,8 +144,15 @@ pub fn read_local_image_blob(file_path: String) -> Result<Vec<u8>, String> {
 /// 🖼️ 新增 API：用于"文件列表"的缩略图 (限制 200px)
 /// 200px 足够支持 Retina 屏幕下的列表显示和悬停放大
 #[tauri::command]
-pub fn generate_thumbnail(file_path: String) -> Result<Vec<u8>, String> {
-    // 200px 既能满足列表(48px)的高清显示，也能满足悬停放大(200px)的需求
-    // 且生成的 Blob 大小通常只有几 KB，加载飞快
-    load_and_resize_blob(&file_path, 200)
+pub async fn generate_thumbnail(file_path: String) -> Result<String, String> {
+    // 🟢 使用 spawn_blocking 将计算密集型任务扔到专用线程池，防止阻塞 Tauri 主循环
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        // 这里放所有的重型操作：读取、解码、缩放、Base64编码
+        let bytes = load_and_resize_blob(&file_path, 200)?;
+        let b64 = general_purpose::STANDARD.encode(&bytes);
+        Ok(format!("data:image/jpeg;base64,{}", b64))
+    }).await;
+
+    // 处理 Result<Result<...>> 的嵌套解包
+    result.map_err(|e| e.to_string())?
 }
