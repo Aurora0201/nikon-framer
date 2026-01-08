@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import {thumbnailLoader} from '../../composables/thumbnailManager.js'
 
 const props = defineProps({
   path: { type: String, required: true }
@@ -14,31 +15,41 @@ const mousePos = ref({ x: 0, y: 0 });
 
 let observer = null;
 
-// 🟢 1. 生成缩略图的核心逻辑
-const loadThumbnail = async () => {
-  if (imgUrl.value) return; // 已加载过
-
-  try {
-    // 调用我们刚写的 Rust 新接口 (返回 200px 的 jpeg bytes)
-    const bytes = await invoke('generate_thumbnail', { filePath: props.path });
-    const blob = new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' });
-    imgUrl.value = URL.createObjectURL(blob);
-  } catch (err) {
-    // 失败静默处理，显示占位符即可
-    // console.warn("Thumb failed:", err);
-  }
-};
-
-// 🟢 2. 懒加载观察者
 onMounted(() => {
   observer = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting) {
+    const entry = entries[0];
+    
+    if (entry.isIntersecting) {
+      // A. 进入视口：请求加载
       isVisible.value = true;
-      loadThumbnail();
-      observer.disconnect(); // 加载一次后就断开，省资源
+      
+      if (!imgUrl.value) {
+        thumbnailLoader.add(
+          props.path,
+          // 成功回调
+          (bytes) => {
+            // 这里已经是异步回调了，检查一下组件是否还在 (防止内存泄漏)
+            if (!elRef.value) return; 
+            const blob = new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' });
+            imgUrl.value = URL.createObjectURL(blob);
+            // 加载成功后，断开观察，因为不需要再反复触发了
+            observer.disconnect();
+          },
+          // 失败回调
+          (err) => { /* console.warn(err) */ }
+        );
+      }
+    } else {
+      // B. 🟢 离开视口：取消加载
+      // 如果用户滚得太快，这张图还没来得及发给 Rust 就被划走了，
+      // 这里会把它从队列里删掉，极大地节省资源。
+      if (!imgUrl.value) {
+        thumbnailLoader.remove(props.path);
+      }
     }
   }, { 
-    rootMargin: '100px' // 提前 100px 加载，体验更流畅
+    rootMargin: '100px', // 预加载范围
+    threshold: 0.1       // 出现 10% 就算进入
   });
   
   if (elRef.value) observer.observe(elRef.value);
@@ -46,7 +57,9 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (observer) observer.disconnect();
-  // 🟢 务必释放内存！
+  // 组件销毁时，也尝试从队列移除（双重保险）
+  thumbnailLoader.remove(props.path);
+  
   if (imgUrl.value) URL.revokeObjectURL(imgUrl.value);
 });
 

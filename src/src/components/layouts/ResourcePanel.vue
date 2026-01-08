@@ -85,12 +85,14 @@ const clearAll = () => { if(confirm('确定清空列表?')) store.clearQueue(); 
     </div>
 
     <div class="section file-list-section">
-      <div class="list-header-row">
-        <label class="section-title">队列 ({{ store.fileQueue.length }})</label>
-        <button v-if="store.fileQueue.length > 0" @click="clearAll" class="clear-btn">清空</button>
-      </div>
+    <div class="list-header-row">
+      <label class="section-title">队列 ({{ store.fileQueue.length }})</label>
+      <button v-if="store.fileQueue.length > 0" @click="clearAll" class="clear-btn">清空</button>
+    </div>
+    
+    <div class="list-viewport">
       
-      <div class="file-list" :class="{ 'drag-active': store.isDragging }">
+      <div class="file-list">
         <div v-if="store.fileQueue.length === 0" class="empty-tip">
           <div style="font-size: 2em; margin-bottom: 10px;">📥</div>
           <div>拖入照片<br>或使用上方按钮</div>
@@ -105,24 +107,30 @@ const clearAll = () => { if(confirm('确定清空列表?')) store.clearQueue(); 
           @click="selectFile(file.path)"
         >
           <div class="item-left">
-            <LazyThumbnail :path="file.path" class="list-thumb" />
-            <div class="name-col">
-    
-              <div class="name-row">
-                <span class="file-index">{{ index + 1 }}</span>
-                <span class="file-name" :title="file.name">{{ file.name }}</span>
+              <LazyThumbnail :path="file.path" class="list-thumb" />
+              <div class="name-col">
+                <div class="name-row">
+                  <span class="file-index">{{ index + 1 }}</span>
+                  <span class="file-name" :title="file.name">{{ file.name }}</span>
+                </div>
+                <span class="exif-badge" :class="file.exifStatus">
+                  {{ file.exifStatus === 'ok' ? 'EXIF DATA' : (file.exifStatus === 'scanning' ? 'SCANNING...' : 'NO EXIF') }}
+                </span>
               </div>
-              
-              <span class="exif-badge" :class="file.exifStatus">
-                {{ file.exifStatus === 'ok' ? 'EXIF DATA' : (file.exifStatus === 'scanning' ? 'SCANNING...' : 'NO EXIF') }}
-              </span>
             </div>
-          </div>
-          
-          <button @click="(e) => removeFile(e, index)" class="del-btn">×</button>
+            <button @click="(e) => removeFile(e, index)" class="del-btn">×</button>
         </div>
       </div>
+
+      <div v-if="store.isDragging" class="drag-overlay">
+        <div class="overlay-content">
+          <span style="font-size: 2em">📂</span>
+          <span>释放添加图片</span>
+        </div>
+      </div>
+
     </div>
+  </div>
   </div>
 </template>
 
@@ -141,8 +149,16 @@ const clearAll = () => { if(confirm('确定清空列表?')) store.clearQueue(); 
 .icon-btn-mini:hover { background: #444; border-color: #666; }
 
 /* 主体区域 */
+/* 1. 找到 .panel-body，禁止它滚动 */
 .panel-body {
-  flex: 1; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px;
+  flex: 1; 
+  padding: 12px; 
+  /* overflow-y: auto;  <-- ❌ 删掉这行 (这是罪魁祸首) */
+  overflow: hidden;  /* <-- ✅ 改成这行 (锁死父容器) */
+  
+  display: flex; 
+  flex-direction: column; 
+  gap: 20px;
 }
 .section { display: flex; flex-direction: column; }
 .section-title {
@@ -180,16 +196,36 @@ const clearAll = () => { if(confirm('确定清空列表?')) store.clearQueue(); 
 .mode-select:hover { border-color: #555; }
 
 /* 列表区域 */
-.file-list-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* 1. 列表区域容器调整 */
+.file-list-section { 
+  flex: 1; 
+  min-height: 0; 
+  display: flex; 
+  flex-direction: column; 
+}
+
+/* 🟢 [新增] 视口容器 */
+.list-viewport {
+  flex: 1;
+  position: relative; /* 关键：作为绝对定位的锚点 */
+  overflow: hidden;   /* 关键：防止内部元素溢出 */
+  display: flex;      /* 让内部的 file-list 自动撑开 */
+  border: 1px solid #222; /* 边框移到这里，列表看起来更整体 */
+  border-radius: 4px;
+}
 .list-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .clear-btn { background: none; border: none; color: #555; font-size: 0.75em; cursor: pointer; padding: 0; }
 .clear-btn:hover { color: #d44; text-decoration: underline; }
 
+/* 2. 列表本身 (只负责滚动) */
 .file-list {
-  flex: 1; overflow-y: auto; display: flex; flex-direction: column;
-  border: 1px solid #222; border-radius: 4px;
+  flex: 1;
+  overflow-y: auto;   /* 滚动条在这里 */
+  width: 100%;        /* 填满视口 */
+  display: flex; 
+  flex-direction: column;
+  /* border: ... 移除了这里的边框，由 viewport 接管 */
 }
-
 /* --- 修改部分：调整高度以适应图片 --- */
 .file-item {
   /* 🟢 修改：增加高度，从原来的默认值改为 60px，给图片留空间 */
@@ -204,6 +240,34 @@ const clearAll = () => { if(confirm('确定清空列表?')) store.clearQueue(); 
   background: #2c2c2c;
   border-left: 3px solid var(--nikon-yellow);
   padding-left: 7px;
+}
+
+/* 🟢 [新增] 独立的遮罩层样式 */
+.drag-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0; /* 铺满整个视口 */
+  z-index: 99; /* 保证在最上层 */
+  
+  background-color: rgba(26, 26, 26, 0.85); /* 深色半透明背景 */
+  border: 2px dashed var(--nikon-yellow); /* 黄色虚线框 */
+  backdrop-filter: blur(2px); /* 可选：一点磨砂效果 */
+  
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none; /* 关键：让鼠标事件穿透 (虽然 drop 实际上是在 document 监听，但加上这个是好习惯) */
+}
+
+.overlay-content {
+  color: var(--nikon-yellow);
+  font-weight: bold;
+  font-size: 1.1em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 /* --- 修改部分：增加左侧间距 --- */
