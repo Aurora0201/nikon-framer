@@ -10,6 +10,7 @@ mod state;
 mod setup;
 mod commands;
 mod parser;
+mod batch;
 
 
 use std::sync::Arc;
@@ -26,16 +27,17 @@ fn main() {
         // 3. 注册命令 (从 commands 模块导入)
         .invoke_handler(tauri::generate_handler![
             // 批处理
-            commands::batch::start_batch_process_v2,
+            commands::start_batch_process_v2,
+            batch::start_batch_process_v3,
             //
-            commands::common::check_output_exists,
+            commands::check_output_exists,
             // 🟢 注册新命令
-            commands::common::filter_unprocessed_files,
+            commands::filter_unprocessed_files,
             // 通用命令
-            commands::common::stop_batch_process,
-            commands::common::check_file_exif,
+            commands::stop_batch_process,
+            commands::check_file_exif,
             // 其他遗留命令
-            commands::common::read_local_image_blob,
+            commands::read_local_image_blob,
             metadata::filter_files,
             metadata::scan_folder,
         ])

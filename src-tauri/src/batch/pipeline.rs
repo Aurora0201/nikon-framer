@@ -1,0 +1,300 @@
+// src/batch/pipline.rs
+
+use std::path::PathBuf;
+use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+use std::time::Instant;
+use tauri::{Window, State, Emitter};
+use rayon::prelude::*;
+use serde_json::json;
+use image::DynamicImage;
+
+use crate::models::StyleOptions;
+use crate::{AppState};
+use crate::parser::{models::ParsedImageContext};
+use crate::processor::traits::FrameProcessor;
+use crate::graphics::load_image_auto_rotate; // 假设你把那个函数放到了 utils 模块
+
+// =========================================================
+// 1. 上下文定义 (Context)
+// =========================================================
+
+/// 全局只读上下文：所有步骤共享，存放通用配置和状态
+pub struct GlobalContext {
+    pub window: Window,
+    pub app_state: Arc<AppState>,
+    pub options: StyleOptions,
+    pub total_files: usize,
+    pub completed_count: Arc<AtomicUsize>,
+}
+
+/// 任务上下文：随单个文件流动，存放中间产物
+/// 使用 Option 是因为在管道初期，很多数据还没生成
+pub struct TaskContext {
+    pub file_path: String,
+    pub image: Option<DynamicImage>,         // 加载后填充
+    pub parsed_ctx: Option<ParsedImageContext>, // 解析后填充
+    pub final_image: Option<DynamicImage>,   // 处理后填充
+    pub output_path: Option<PathBuf>,        // 保存后填充
+}
+
+impl TaskContext {
+    pub fn new(file_path: String) -> Self {
+        Self {
+            file_path,
+            image: None,
+            parsed_ctx: None,
+            final_image: None,
+            output_path: None,
+        }
+    }
+}
+
+// =========================================================
+// 2. 管道接口定义 (Trait)
+// =========================================================
+
+/// 步骤执行结果
+pub enum StepResult {
+    Continue,           // 继续下一步
+    Skip(String),       // 跳过当前文件 (附带原因)
+    Stop,               // 停止整个批处理 (用户取消)
+}
+
+/// 管道步骤特征
+/// 要求 Send + Sync 是为了能在多线程 (Rayon) 中安全运行
+pub trait PipelineStep: Send + Sync {
+    fn execute(&self, global: &GlobalContext, task: &mut TaskContext) -> Result<StepResult, String>;
+}
+
+
+// =========================================================
+// 3. 具体步骤实现
+// =========================================================
+
+/// 步骤 1: 检查是否收到停止信号
+struct CheckStopStep;
+impl PipelineStep for CheckStopStep {
+    fn execute(&self, global: &GlobalContext, _task: &mut TaskContext) -> Result<StepResult, String> {
+        if global.app_state.should_stop.load(Ordering::Relaxed) {
+            return Ok(StepResult::Stop);
+        }
+        Ok(StepResult::Continue)
+    }
+}
+
+/// 步骤 2: 检查 EXIF 是否存在 (快速过滤)
+struct CheckExifStep;
+impl PipelineStep for CheckExifStep {
+    fn execute(&self, _global: &GlobalContext, task: &mut TaskContext) -> Result<StepResult, String> {
+        // 假设 metadata 模块在 crate::metadata
+        if !crate::metadata::has_exif(&task.file_path) {
+            return Ok(StepResult::Skip("无 EXIF 数据".to_string()));
+        }
+        Ok(StepResult::Continue)
+    }
+}
+
+/// 步骤 3: 加载图片 (使用我们优化后的 load_image_auto_rotate)
+struct LoadImageStep;
+impl PipelineStep for LoadImageStep {
+    fn execute(&self, _global: &GlobalContext, task: &mut TaskContext) -> Result<StepResult, String> {
+        // 🟢 使用 ? 优雅地处理错误，如果失败直接抛出 Result Err
+        let img = load_image_auto_rotate(&task.file_path)?;
+        task.image = Some(img);
+        Ok(StepResult::Continue)
+    }
+}
+
+/// 步骤 4: 核心处理 (解析 + 绘图)
+struct ProcessFrameStep {
+    // 处理器策略作为成员变量持有
+    processor: Arc<Box<dyn FrameProcessor + Send + Sync>>,
+}
+impl PipelineStep for ProcessFrameStep {
+    fn execute(&self, _global: &GlobalContext, task: &mut TaskContext) -> Result<StepResult, String> {
+        let img = task.image.as_ref().ok_or("逻辑错误: 图片未加载")?;
+        
+        // A. 解析数据
+        let raw_exif = crate::metadata::get_exif_data(&task.file_path);
+        let parsed_ctx = crate::parser::parse(raw_exif);
+        
+        // B. 绘制合成
+        let final_img = self.processor.process(img, &parsed_ctx)
+            .map_err(|e| format!("处理失败: {}", e))?;
+            
+        task.parsed_ctx = Some(parsed_ctx);
+        task.final_image = Some(final_img);
+        Ok(StepResult::Continue)
+    }
+}
+
+/// 步骤 5: 保存文件
+struct SaveImageStep;
+impl PipelineStep for SaveImageStep {
+    fn execute(&self, global: &GlobalContext, task: &mut TaskContext) -> Result<StepResult, String> {
+        let final_img = task.final_image.as_ref().ok_or("逻辑错误: 最终图未生成")?;
+        
+        let suffix = global.options.filename_suffix();
+        let path_obj = std::path::Path::new(&task.file_path);
+        
+        // 简单的路径计算逻辑
+        let parent = path_obj.parent().unwrap_or(std::path::Path::new("."));
+        let file_stem = path_obj.file_stem().unwrap().to_string_lossy();
+        let new_filename = format!("{}_{}.jpg", file_stem, suffix);
+        let output_path = parent.join(new_filename);
+        
+        final_img.save(&output_path).map_err(|e| format!("保存失败: {}", e))?;
+        
+        task.output_path = Some(output_path);
+        Ok(StepResult::Continue)
+    }
+}
+
+
+// =========================================================
+// 4. 管道执行器 (Runner)
+// =========================================================
+
+struct Pipeline {
+    steps: Vec<Box<dyn PipelineStep>>,
+}
+
+impl Pipeline {
+    fn new() -> Self {
+        Self { steps: Vec::new() }
+    }
+
+    fn add_step<S: PipelineStep + 'static>(mut self, step: S) -> Self {
+        self.steps.push(Box::new(step));
+        self
+    }
+
+    /// 运行单张图片的完整流程
+    fn run(&self, global: &GlobalContext, file_path: String) {
+        let mut task = TaskContext::new(file_path.clone());
+        let mut skip_reason = None;
+        let mut error_msg = None;
+        let mut is_stopped = false;
+
+        // --- 核心循环 ---
+        for step in &self.steps {
+            match step.execute(global, &mut task) {
+                Ok(StepResult::Continue) => continue, // 继续下一步
+                Ok(StepResult::Stop) => {
+                    is_stopped = true;
+                    break; // 停止当前任务 (外部 Rayon 会继续调度，但 CheckStopStep 会拦截)
+                },
+                Ok(StepResult::Skip(reason)) => {
+                    skip_reason = Some(reason);
+                    break; // 跳过后续步骤
+                },
+                Err(e) => {
+                    error_msg = Some(e);
+                    break; // 报错终止
+                }
+            }
+        }
+
+        if is_stopped { return; }
+
+        // --- 统一的进度报告 ---
+        // 无论成功、跳过还是失败，都要给前端一个交代
+        let current = global.completed_count.fetch_add(1, Ordering::Relaxed) + 1;
+        
+        let (status, msg) = if let Some(err) = error_msg {
+            ("error", Some(err))
+        } else if let Some(reason) = skip_reason {
+            ("skipped", Some(reason))
+        } else {
+            ("processing", None) // 或 "success"
+        };
+
+        // 发送事件 (忽略发送失败，因为窗口可能已关闭)
+        let _ = global.window.emit("process-progress", json!({
+            "current": current,
+            "total": global.total_files,
+            "filepath": file_path,
+            "status": status,
+            "message": msg
+        }));
+        
+        // 如果出错，可以在这里打印服务端日志
+        if status == "error" {
+            println!("❌ [Batch V3] Error handling {}: {:?}", file_path, msg);
+        }
+    }
+}
+
+// =========================================================
+// 5. API 入口函数
+// =========================================================
+
+#[tauri::command]
+pub async fn start_batch_process_v3(
+    window: Window,
+    state: State<'_, Arc<AppState>>,
+    file_paths: Vec<String>,
+    context: crate::models::BatchContext, // 确保这个结构体是公有的
+) -> Result<String, String> {
+    
+    println!("🚀 [API V3] Pipeline Mode Started ({} files)", file_paths.len());
+
+    // 1. 准备全局状态
+    let state_arc = (*state).clone();
+    state_arc.should_stop.store(false, Ordering::Relaxed);
+    
+    let total_files = file_paths.len();
+    let batch_start = Instant::now();
+    let completed_count = Arc::new(AtomicUsize::new(0));
+
+    // 2. 构建全局上下文 (Arc封装以便多线程共享)
+    
+
+    let global_ctx = Arc::new(GlobalContext {
+        window: window.clone(),
+        app_state: state_arc.clone(),
+        options: context.options.clone(),
+        total_files,
+        completed_count,
+    });
+
+    // 3. 创建处理器策略 (Factory)
+    let processor_strategy = crate::processor::create_processor(&context.options);
+    let processor_arc = Arc::new(processor_strategy);
+
+    // 4. 🔥 组装流水线 (The Assembly Line)
+    // 这里体现了 OCP：如果想加功能，就在中间 insert 一个 step
+    let pipeline = Arc::new(Pipeline::new()
+        .add_step(CheckStopStep)
+        .add_step(CheckExifStep)
+        .add_step(LoadImageStep)
+        .add_step(ProcessFrameStep { processor: processor_arc })
+        .add_step(SaveImageStep)
+    );
+
+    // 5. 启动线程池进行并行计算
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        file_paths.par_iter().for_each(|file_path| {
+            // 所有脏活累活都委托给 pipeline.run
+            pipeline.run(&global_ctx, file_path.clone());
+        });
+    }).await;
+
+    // 6. 结束处理
+    if let Err(e) = result {
+        return Err(format!("Thread execution failed: {}", e));
+    }
+
+    let duration = batch_start.elapsed();
+    
+    // 检查是否是用户主动停止
+    if state_arc.should_stop.load(Ordering::Relaxed) {
+        window.emit("process-status", "stopped").map_err(|e| e.to_string())?;
+        return Ok("Stopped by user".to_string());
+    }
+
+    println!("✨ [API V3] Batch Complete in {:.2?}", duration);
+    window.emit("process-status", "finished").map_err(|e| e.to_string())?;
+
+    Ok(format!("Done in {:.2?}", duration))
+}
