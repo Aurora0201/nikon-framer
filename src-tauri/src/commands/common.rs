@@ -4,7 +4,7 @@ use crate::{graphics::load_image_auto_rotate, models::BatchContext, state::AppSt
 use crate::metadata; // 引用 crate::metadata
 use std::path::Path;
 use std::io::Cursor;
-use image::{ImageFormat, imageops::FilterType};
+use image::{ImageFormat};
 use base64::{Engine as _, engine::general_purpose};
 
 #[tauri::command]
@@ -22,44 +22,45 @@ pub fn stop_batch_process(state: State<'_, Arc<AppState>>) {
 pub fn check_output_exists(
     file_path: String,
     style: String
-) -> Option<String> { // 返回值 Option<String> 现在代表 Base64 字符串
+) -> Option<String> {
     
-    // 1. 计算目标路径 (和你之前的逻辑一样)
-    let suffix = format!("_{}", style);
+    // 1. 计算目标路径 (逻辑保持不变)
+    // ---------------------------------------------------------
+    // 这里有一点防御性编程：如果路径解析失败直接返回 None
     let path_obj = Path::new(&file_path);
-    let parent = path_obj.parent().unwrap_or(Path::new("."));
-    let file_stem = path_obj.file_stem().unwrap_or_default().to_string_lossy();
+    let parent = path_obj.parent()?;
+    let file_stem = path_obj.file_stem()?.to_string_lossy();
+    
+    // 根据命名规则拼接目标文件名
+    let suffix = format!("_{}", style);
     let target_filename = format!("{}{}.jpg", file_stem, suffix);
     let target_path = parent.join(target_filename);
 
     // 2. 检查文件是否存在
+    // ---------------------------------------------------------
     if !target_path.exists() {
         return None;
     }
 
-    // 3. 🟢 [核心修改] 读取 -> 缩放 -> 转 Base64
-    // 不直接返回路径，而是返回图片数据
-    match image::open(&target_path) {
-        Ok(img) => {
-            // A. 缩放图片 (性能关键！只用来预览不需要全尺寸)
-            // 假设预览框最大也就 1000px 宽，这样生成的字符串很小，传输极快
-            let resized = img.thumbnail(1000, 1000); 
+    // 3. 🟢 [复用核心] 调用通用函数获取二进制数据
+    // ---------------------------------------------------------
+    // 将 PathBuf 转为 &str
+    let target_path_str = target_path.to_str()?;
 
-            // B. 写入内存 buffer
-            let mut buffer = Vec::new();
-            // 存为 JPEG 格式，质量 80，进一步减小体积
-            if let Err(_) = resized.write_to(&mut Cursor::new(&mut buffer), ImageFormat::Jpeg) {
-                return None;
-            }
-
-            // C. 转 Base64
+    // 复用 load_and_resize_blob
+    // 这里的 1000 是 max_dimension，用于预览图刚好合适
+    match load_and_resize_blob(target_path_str, 1000) {
+        Ok(buffer) => {
+            // 4. 转 Base64 (前端 img 标签直接显示需要)
+            // ---------------------------------------------------------
             let b64 = general_purpose::STANDARD.encode(&buffer);
             
-            // D. 返回带前缀的完整 Data URL
+            // 返回完整的 Data URL
             Some(format!("data:image/jpeg;base64,{}", b64))
         },
         Err(e) => {
-            println!("读取预览图失败: {}", e);
+            // 虽然文件存在，但读取或解码失败（可能是文件损坏）
+            println!("⚠️ 预览图加载失败 [{}]: {}", target_path_str, e);
             None
         }
     }
@@ -108,28 +109,43 @@ pub fn filter_unprocessed_files(
 }
 
 
-/// 读取本地图片，**自动矫正EXIF方向**，缩放并转换为 JPEG Blob
-#[tauri::command]
-pub fn read_local_image_blob(file_path: String) -> Result<Vec<u8>, String> {
 
-    // =================================================================
-    // 🟢 阶段 1: 读取并矫正 EXIF 方向
-    // =================================================================
+/// 🔒 内部通用函数：读取 -> 旋转 -> 缩放 -> 编码
+fn load_and_resize_blob(file_path: &str, max_dimension: u32) -> Result<Vec<u8>, String> {
+    
+    // 1. 复用之前的逻辑：加载并自动旋转
+    let img = load_image_auto_rotate(file_path)?;
 
-    let img = load_image_auto_rotate(&file_path)?;
+    // 2. 智能缩放
+    // 🟢 优化点：使用 .thumbnail() 而不是 .resize()
+    // thumbnail 会自动保持长宽比，并且针对"缩小"场景有极大的性能优化
+    // (它内部会先进行快速降采样，然后再精细缩放，比直接用 Lanczos3 算全图快得多)
+    let resized_img = img.thumbnail(max_dimension, max_dimension);
 
-    // =================================================================
-    // 阶段 2: 缩放与编码 (保持原有逻辑)
-    // =================================================================
-
-    // 此时 img 已经是方向正确的了，再进行缩放
-    let resized_img = img.resize(1600, 1600, FilterType::Lanczos3);
-
+    // 3. 编码为 JPEG
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer);
     
+    // 缩略图质量设为默认 (约 75) 即可，足够清晰且体积小
     resized_img.write_to(&mut cursor, ImageFormat::Jpeg)
         .map_err(|e| format!("图片编码失败: {}", e))?;
 
     Ok(buffer)
+}
+
+/// 读取本地图片，**自动矫正EXIF方向**，缩放并转换为 JPEG Blob
+#[tauri::command]
+pub fn read_local_image_blob(file_path: String) -> Result<Vec<u8>, String> {
+
+    // 维持原有的 1600px 逻辑
+    load_and_resize_blob(&file_path, 1600)
+}
+
+/// 🖼️ 新增 API：用于"文件列表"的缩略图 (限制 200px)
+/// 200px 足够支持 Retina 屏幕下的列表显示和悬停放大
+#[tauri::command]
+pub fn generate_thumbnail(file_path: String) -> Result<Vec<u8>, String> {
+    // 200px 既能满足列表(48px)的高清显示，也能满足悬停放大(200px)的需求
+    // 且生成的 Blob 大小通常只有几 KB，加载飞快
+    load_and_resize_blob(&file_path, 200)
 }
