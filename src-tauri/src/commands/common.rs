@@ -1,6 +1,6 @@
 use tauri::State;
-use std::{fs::File, io::BufReader, sync::{Arc, atomic::Ordering}};
-use crate::{models::BatchContext, state::AppState};
+use std::{sync::{Arc, atomic::Ordering}};
+use crate::{graphics::load_image_auto_rotate, models::BatchContext, state::AppState};
 use crate::metadata; // 引用 crate::metadata
 use std::path::Path;
 use std::io::Cursor;
@@ -108,53 +108,22 @@ pub fn filter_unprocessed_files(
 }
 
 
-// 🟢 引入 exif 库相关类型
-use exif::{In, Tag, Value, Reader as ExifReader};
-
 /// 读取本地图片，**自动矫正EXIF方向**，缩放并转换为 JPEG Blob
 #[tauri::command]
 pub fn read_local_image_blob(file_path: String) -> Result<Vec<u8>, String> {
-    let path = Path::new(&file_path);
-    if !path.exists() {
-        return Err("文件不存在".to_string());
-    }
 
     // =================================================================
     // 🟢 阶段 1: 读取并矫正 EXIF 方向
     // =================================================================
-    
-    // 1.1 读取原始像素数据
-    // 注意：我们要把 img 声明为可变的 (mut)，因为后面可能要旋转它
-    let file_for_pixels = File::open(path).map_err(|e| format!("无法打开文件: {}", e))?;
-    let reader_for_pixels = BufReader::new(file_for_pixels);
-    let mut img = image::load(reader_for_pixels, ImageFormat::from_path(path).unwrap_or(ImageFormat::Jpeg))
-        .map_err(|e| format!("图片解码失败: {}", e))?;
 
-    // 1.2 读取 EXIF 方向信息
-    // 我们需要单独再打开一次文件来读取 EXIF，这样最稳妥，避免不同库争抢 Cursor 位置
-    let orientation_val = get_exif_orientation(path).unwrap_or(1); // 默认方向 1 (正常)
-
-    // 1.3 根据方向值应用旋转/翻转
-    // EXIF 方向定义参考：http://sylvana.net/jpegcrop/exif_orientation.html
-    if orientation_val != 1 {
-        img = match orientation_val {
-            2 => img.fliph(),                // 水平镜像
-            3 => img.rotate180(),            // 旋转 180度
-            4 => img.flipv(),                // 垂直镜像
-            5 => img.rotate90().fliph(),     // 旋转90度 + 水平镜像
-            6 => img.rotate90(),             // 顺时针旋转 90度 (最常见的竖屏情况)
-            7 => img.rotate270().fliph(),    // 旋转270度 + 水平镜像
-            8 => img.rotate270(),            // 逆时针旋转 90度
-            _ => img,                        // 其他情况不做处理
-        };
-    }
+    let img = load_image_auto_rotate(&file_path)?;
 
     // =================================================================
     // 阶段 2: 缩放与编码 (保持原有逻辑)
     // =================================================================
 
     // 此时 img 已经是方向正确的了，再进行缩放
-    let resized_img = img.resize(1600, 1600, FilterType::Triangle);
+    let resized_img = img.resize(1600, 1600, FilterType::Lanczos3);
 
     let mut buffer = Vec::new();
     let mut cursor = Cursor::new(&mut buffer);
@@ -163,25 +132,4 @@ pub fn read_local_image_blob(file_path: String) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("图片编码失败: {}", e))?;
 
     Ok(buffer)
-}
-
-
-// 🟢 辅助函数：尝试提取 EXIF 方向值
-fn get_exif_orientation(path: &Path) -> Option<u16> {
-    let file = File::open(path).ok()?;
-    let mut bufreader = std::io::BufReader::new(file);
-    let exif_reader = ExifReader::new();
-    
-    // 尝试从容器读取 EXIF
-    let exif = exif_reader.read_from_container(&mut bufreader).ok()?;
-    
-    // 尝试获取主目录下的 Orientation 标签
-    match exif.get_field(Tag::Orientation, In::PRIMARY) {
-        Some(field) => match field.value {
-            // EXIF 方向通常存储为 Short (u16) 类型
-            Value::Short(ref v) if !v.is_empty() => Some(v[0]),
-            _ => None,
-        },
-        None => None,
-    }
 }

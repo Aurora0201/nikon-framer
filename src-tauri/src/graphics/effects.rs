@@ -1,3 +1,6 @@
+use std::{fs::File, io::BufReader};
+
+use exif::{In, Reader, Tag};
 use image::{DynamicImage, Rgba, imageops, GenericImageView, RgbaImage};
 use imageproc::rect::Rect;
 // 引用同级目录下的 shapes 模块
@@ -191,4 +194,57 @@ pub fn draw_glass_foreground_on(
             }
         }
     }
+}
+
+
+/// ⚡️ 轻量级：仅读取 EXIF 方向信息，不解码图片
+fn get_orientation(path: &str) -> u32 {
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return 1, // 打开失败当做默认方向
+    };
+    
+    let mut bufreader = BufReader::new(&file);
+    let reader = Reader::new();
+
+    // read_from_container 只需要读取文件头部信息，开销很小
+    match reader.read_from_container(&mut bufreader) {
+        Ok(exif) => {
+            if let Some(field) = exif.get_field(Tag::Orientation, In::PRIMARY) {
+                // 尝试获取 u32 值，默认为 1
+                field.value.get_uint(0).unwrap_or(1)
+            } else {
+                1
+            }
+        },
+        Err(_) => 1,
+    }
+}
+
+pub fn load_image_auto_rotate(path: &str) -> Result<DynamicImage, String> {
+    // 1. 先获取方向 (轻量级 IO 操作)
+    // 放在图片解码之前，如果这一步失败不影响后续解码，且几乎不占内存
+    let orientation = get_orientation(path);
+
+    // 2. 解码图片 (重量级内存操作)
+    // 此时 img 可能是 Rgb8 (3字节) 或 Rgba8 (4字节)，保留原格式最省内存
+    let mut img = image::open(path).map_err(|e| format!("图片加载失败: {}", e))?;
+
+    // 3. 根据方向调整 (覆盖所有 8 种情况)
+    // 🟢 优化：使用 img.rotate90() 等方法，它们会保留原图色彩空间(RGB/RGBA)，
+    // 而不是像之前那样强制转为 ImageRgba8。
+    if orientation != 1 {
+        img = match orientation {
+            2 => img.fliph(),
+            3 => img.rotate180(),
+            4 => img.flipv(),
+            5 => img.rotate90().fliph(),
+            6 => img.rotate90(),
+            7 => img.rotate270().fliph(),
+            8 => img.rotate270(),
+            _ => img,
+        };
+    }
+
+    Ok(img)
 }
