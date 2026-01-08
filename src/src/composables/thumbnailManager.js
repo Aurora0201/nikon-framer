@@ -44,8 +44,8 @@ class ThumbnailLoader {
 
     try {
       // 调用 Rust
-      const bytes = await invoke('generate_thumbnail', { filePath: task.filePath });
-      task.onSuccess(bytes);
+      const base64Str = await invoke('generate_thumbnail', { filePath: task.filePath });
+      task.onSuccess(base64Str);
     } catch (err) {
       if (task.onError) task.onError(err);
     } finally {

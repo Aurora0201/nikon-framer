@@ -53,7 +53,7 @@ watch(() => store.fileQueue, (newQueue) => {
 
 const selectFile = (path) => store.setActiveFile(path);
 const removeFile = (e, index) => { e.stopPropagation(); store.removeFile(index); };
-const clearAll = () => { if(confirm('确定清空列表?')) store.clearQueue(); };
+const clearAll = () => store.clearQueue(); 
 </script>
 
 <template>

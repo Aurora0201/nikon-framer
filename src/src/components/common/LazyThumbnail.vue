@@ -27,12 +27,11 @@ onMounted(() => {
         thumbnailLoader.add(
           props.path,
           // 成功回调
-          (bytes) => {
+          (base64Str) => {
             // 这里已经是异步回调了，检查一下组件是否还在 (防止内存泄漏)
             if (!elRef.value) return; 
-            const blob = new Blob([new Uint8Array(bytes)], { type: 'image/jpeg' });
-            imgUrl.value = URL.createObjectURL(blob);
-            // 加载成功后，断开观察，因为不需要再反复触发了
+            // 🟢 直接赋值，不需要 createObjectURL 了
+            imgUrl.value = base64Str;
             observer.disconnect();
           },
           // 失败回调
@@ -84,6 +83,7 @@ const onMouseMove = (e) => {
       :src="imgUrl" 
       class="thumb-img" 
       loading="lazy" 
+      decoding="async"
       alt="thumb" 
       draggable="false"
     />
