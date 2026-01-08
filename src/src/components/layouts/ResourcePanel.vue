@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { store } from '../../store/index.js'; 
 // 🟢 1. 直接引入静态配置数组
 import { CATEGORY_OPTIONS } from '../../frames/registry.js'; 
+import LazyThumbnail from '../common/LazyThumbnail.vue';
 
 // --- 辅助逻辑 & 按钮动作 (保持原样，没有任何修改) ---
 const handlePathList = (paths) => {
@@ -68,7 +69,6 @@ const clearAll = () => { if(confirm('确定清空列表?')) store.clearQueue(); 
     
     <div class="section">
       <label class="section-title">样式分类 / Category</label>
-      
       <select 
         :value="store.settings.style" 
         @change="(e) => store.setCategory(e.target.value)"
@@ -105,14 +105,20 @@ const clearAll = () => { if(confirm('确定清空列表?')) store.clearQueue(); 
           @click="selectFile(file.path)"
         >
           <div class="item-left">
-            <span class="file-index">{{ index + 1 }}</span>
+            <LazyThumbnail :path="file.path" class="list-thumb" />
             <div class="name-col">
-              <span class="file-name" :title="file.name">{{ file.name }}</span>
+    
+              <div class="name-row">
+                <span class="file-index">{{ index + 1 }}</span>
+                <span class="file-name" :title="file.name">{{ file.name }}</span>
+              </div>
+              
               <span class="exif-badge" :class="file.exifStatus">
-                {{ file.exifStatus === 'ok' ? 'EXIF' : (file.exifStatus === 'scanning' ? '...' : 'NO EXIF') }}
+                {{ file.exifStatus === 'ok' ? 'EXIF DATA' : (file.exifStatus === 'scanning' ? 'SCANNING...' : 'NO EXIF') }}
               </span>
             </div>
           </div>
+          
           <button @click="(e) => removeFile(e, index)" class="del-btn">×</button>
         </div>
       </div>
@@ -184,8 +190,11 @@ const clearAll = () => { if(confirm('确定清空列表?')) store.clearQueue(); 
   border: 1px solid #222; border-radius: 4px;
 }
 
+/* --- 修改部分：调整高度以适应图片 --- */
 .file-item {
-  padding: 10px 10px; /* 稍微增加一点点击区域 */
+  /* 🟢 修改：增加高度，从原来的默认值改为 60px，给图片留空间 */
+  padding: 8px 10px; 
+  height: 60px; 
   border-bottom: 1px solid #2a2a2a;
   display: flex; align-items: center; justify-content: space-between;
   transition: background 0.2s;
@@ -197,29 +206,58 @@ const clearAll = () => { if(confirm('确定清空列表?')) store.clearQueue(); 
   padding-left: 7px;
 }
 
-.item-left { display: flex; align-items: center; overflow: hidden; gap: 10px; flex: 1; }
+/* --- 修改部分：增加左侧间距 --- */
+.item-left { 
+  display: flex; 
+  align-items: center; 
+  overflow: hidden; 
+  gap: 10px; /* 🟢 保持适当间距 */
+  flex: 1; 
+}
 
+/* 🟢 修改：序号样式微调 */
+/* 放在文件名旁边时，建议稍微做小一点，像个小标签 */
 .file-index {
-  font-size: 0.75em; color: #555; width: 20px; height: 20px;
+  font-size: 0.8em; 
+  color: #666;       /* 平时颜色淡一点 */
+  background: #2a2a2a; 
+  width: 16px;       /* 稍微改小 */
+  height: 16px;
+  border-radius: 4px; /* 改成圆角矩形看起来更像标签，或者保持 50% 圆形也可以 */
   display: flex; align-items: center; justify-content: center;
-  border-radius: 50%; background: #222; flex-shrink: 0;
+  flex-shrink: 0;
+  font-family: monospace;
+  line-height: 1;
+}
+
+/* --- 🟢 新增部分：略缩图样式微调 --- */
+.list-thumb {
+  margin-right: 2px; /* 图片和文字之间再加一点点呼吸感 */
+  flex-shrink: 0;    /* 防止被挤扁 */
 }
 .file-item.active .file-index { color: var(--nikon-yellow); background: rgba(255,225,0,0.1); }
 
-.name-col { display: flex; flex-direction: column; overflow: hidden; gap: 3px; flex: 1; }
 
-/* 🟢 [修复 3] 文件名加大 */
+/* --- 修改部分：文件名样式微调 --- */
 .file-name {
-  font-size: 0.95em; /* 从 0.85em 增大 */
+  font-size: 0.9em;
   font-weight: 500;
-  color: #ddd; /* 稍微调亮一点 */
+  color: #ddd;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  line-height: 1.2; /* 🟢 紧凑行高 */
 }
 .file-item.active .file-name { color: #fff; font-weight: 600; }
 
+/* --- 修改部分：徽章样式微调 --- */
 .exif-badge {
-  font-size: 9px; padding: 1px 4px; border-radius: 2px;
-  background: #333; color: #666; width: fit-content; font-weight: bold;
+  font-size: 8px; /* 🟢 改小字体 */
+  padding: 1px 4px; 
+  border-radius: 2px;
+  background: #333; 
+  color: #666; 
+  width: fit-content; /* 只包裹文字宽度 */
+  font-weight: bold;
+  letter-spacing: 0.5px;
 }
 .exif-badge.ok { background: rgba(102, 187, 106, 0.15); color: #66bb6a; }
 .exif-badge.no { background: rgba(183, 28, 28, 0.2); color: #ef5350; }
@@ -234,4 +272,12 @@ const clearAll = () => { if(confirm('确定清空列表?')) store.clearQueue(); 
   font-size: 1.4em; line-height: 1; padding: 0 5px; margin-left: 5px;
 }
 .del-btn:hover { color: #d44; }
+
+/* 🟢 新增：第一行的横向布局 */
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 1px; /* 序号和文件名之间的间距 */
+  width: 100%;
+}
 </style>
