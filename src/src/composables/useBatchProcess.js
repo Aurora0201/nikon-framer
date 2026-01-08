@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { store } from '../store/index.js';
 // 1. 引入注册表，用于查询配置
 import { frameRegistry } from '../frames/registry.js';
+import { buildExportPayload, buildStylePayload } from '../utils/payloadHelper.js';
 
 // =============================================================================
 // 🟢 辅助函数：构建上下文 (OCP 通用版)
@@ -11,53 +12,36 @@ import { frameRegistry } from '../frames/registry.js';
 function buildBatchContext() {
   let targetStyleId = store.activePresetId;
 
-  // 1. 容错逻辑：如果未选中，尝试获取当前列表第一个
+  // 1. 容错逻辑：如果未选中，尝试兜底
   if (!targetStyleId) {
     const currentPresets = store.currentPresets;
     if (currentPresets && currentPresets.length > 0) {
       targetStyleId = currentPresets[0].id;
     } else {
-      console.warn("⚠️ [Batch] 未找到有效的 Style ID，使用默认兜底值");
-      return { style: 'BottomWhite' }; 
+      console.warn("⚠️ [Batch] 未找到有效的 Style ID");
+      // 这里的异常处理视你的业务而定
+      targetStyleId = 'BottomWhite'; 
     }
   }
 
-  // 2. 获取当前模式的配置对象 (从注册表中查表)
-  const config = frameRegistry.get(targetStyleId);
+  // 2. 🟢 使用 Helper 构建样式部分
+  const stylePayload = buildStylePayload(
+    targetStyleId, 
+    store.modeParams, 
+    frameRegistry
+  );
 
-  // 3. 构建基础 Payload
-  const payload = { 
-    style: targetStyleId 
+  // 3. 🟢 使用 Helper 构建导出部分
+  const exportPayload = buildExportPayload(store.exportSettings);
+
+  // 4. 最终组装
+  // Rust BatchContext: 
+  //   - options: #[serde(flatten)] -> 展开 stylePayload
+  //   - export:  #[serde(rename="exportSettings")] -> 放入 exportPayload
+  return {
+    ...stylePayload,       
+    exportSettings: exportPayload
   };
-
-  // 4. 动态参数注入 & 类型安全转换 (OCP 核心)
-  if (config && config.defaultParams) {
-    Object.keys(config.defaultParams).forEach(key => {
-      const defaultValue = config.defaultParams[key];
-      const userValue = store.modeParams[key];
-
-      // A. 如果用户没填，回退到默认值
-      if (userValue === undefined || userValue === null) {
-        payload[key] = defaultValue;
-        return;
-      }
-
-      // B. 智能类型推断 (防止 HTML input 返回字符串导致 Rust 解析失败)
-      const expectedType = typeof defaultValue;
-      if (expectedType === 'number') {
-        const parsed = parseFloat(userValue);
-        payload[key] = isNaN(parsed) ? defaultValue : parsed;
-      } 
-      else if (expectedType === 'boolean') {
-        payload[key] = Boolean(userValue);
-      } 
-      else {
-        payload[key] = userValue;
-      }
-    });
-  }
-
-  return payload;
 }
 
 // =============================================================================

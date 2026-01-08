@@ -1,13 +1,16 @@
 import { ref, computed, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { store } from '../store/index.js'; // 路径更新
+import { buildExportPayload, buildStylePayload } from '../utils/payloadHelper.js';
+import { frameRegistry } from '../frames/registry.js';
 
 export function usePreviewLogic() {
   const frozenDisplay = ref({ 
     url: '', 
     type: 'preset', 
     text: '', 
-    presetId: '' 
+    presetId: '',
+    filePath: '' // 🟢 新增：记录这张图属于哪个文件
   });
   
   const imgLoading = ref(false);
@@ -49,25 +52,36 @@ export function usePreviewLogic() {
       processing: store.isProcessing,
       switching: store.isLoadingPresets,
       currentId: store.activePresetId,
-      // 监听 loading
-      loading: imgLoading.value 
+      loading: imgLoading.value,
+      // 🟢 新增：把当前文件路径也放入监听对象的解构中，方便对比
+      currentPath: store.activeFilePath 
     }),
-    ({ source, processing, switching, currentId, loading }) => {
-      // 拦截器：如果正在加载数据 (loading=true)，则保持冻结
+    ({ source, processing, switching, currentId, loading, currentPath }) => {
+      
       if (processing || switching || loading) return;
 
       const isSamePreset = frozenDisplay.value.presetId === currentId;
-      if (
-        source.type === 'preset' && 
-        frozenDisplay.value.type === 'result' && 
-        store.activeFilePath &&
-        isSamePreset
-      ) {
-        return; 
-      }
+      // 🟢 关键判断：当前显示的文件路径，是否等于现在选中的文件路径
+      const isSameFile = frozenDisplay.value.filePath === currentPath;
+
+      // // 拦截器逻辑修正：
+      // if (
+      //   source.type === 'preset' && 
+      //   frozenDisplay.value.type === 'result' && 
+      //   isSamePreset &&
+      //   isSameFile // 🟢 只有是“同一张照片”且“同一个样式”时，才进行防止闪烁的拦截
+      // ) {
+      //   // 如果是切到了另一张照片 (isSameFile 为 false)，这里就不会拦截，
+      //   // 会直接往下走，从而正确切换到 preset 视图。
+      //   return; 
+      // }
 
       // 更新画面
-      frozenDisplay.value = { ...source, presetId: currentId };
+      frozenDisplay.value = { 
+        ...source, 
+        presetId: currentId,
+        filePath: currentPath // 🟢 更新时，务必记下当前是哪张图
+      };
     },
     { deep: true, immediate: true }
   );
@@ -90,10 +104,20 @@ export function usePreviewLogic() {
     const currentPath = store.activeFilePath;
     const currentStyle = store.activePresetId;
 
+      // 1. 复用逻辑构建参数
+    const stylePayload = buildStylePayload(
+      store.activePresetId, 
+      store.modeParams, 
+      frameRegistry
+    );
+  
+    const exportPayload = buildExportPayload(store.exportSettings);
+
     try {
       const existingPath = await invoke('check_output_exists', {
         filePath: currentPath,
-        style: currentStyle
+        styleOptions: stylePayload,  // Rust: style_options
+        exportConfig: exportPayload  // Rust: export_config
       });
       if (existingPath) {
         store.markFileProcessedWithStyle(currentPath, currentStyle, existingPath);
@@ -105,7 +129,20 @@ export function usePreviewLogic() {
     }
   };
 
-  watch([() => store.activeFilePath, () => store.activePresetId], () => checkPreviewStatus(), { immediate: true });
+  // 🟢 [修复] 添加 store.exportSettings 到监听列表
+  // 任何影响输出路径/文件名的因素变化，都必须重新检查
+  watch(
+    [
+      () => store.activeFilePath, 
+      () => store.activePresetId,
+      () => store.exportSettings // ✅ 新增：监听导出设置
+    ], 
+    () => checkPreviewStatus(), 
+    { 
+      immediate: true, 
+      deep: true // ✅ 新增：因为 exportSettings 是对象，需要深度监听属性变化 (如 format, customPath)
+    }
+  );
   watch(() => store.isProcessing, (newVal, oldVal) => { 
     if (oldVal === true && newVal === false) checkPreviewStatus(); 
   });
