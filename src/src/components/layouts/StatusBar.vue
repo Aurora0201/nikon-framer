@@ -5,6 +5,8 @@ import { useBatchProcess } from '../../composables/useBatchProcess.js';
 // 引入批处理逻辑
 const { 
   handleBatchClick, 
+  handleSingleClick, // 🟢 引入新方法
+  isSingleDisabled,  // 🟢 引入禁用状态
   buttonText, 
   buttonClass, 
   buttonCursor,
@@ -43,7 +45,16 @@ const {
 
     <div class="status-right">
       <button 
-        class="action-btn"
+        class="nikon-btn single-mode"
+        :disabled="isSingleDisabled"
+        @click="handleSingleClick"
+        title="仅处理当前选中的图片"
+      >
+        生成选中
+      </button>
+
+      <button 
+        class="nikon-btn batch-mode"
         :class="buttonClass"
         :style="{ cursor: buttonCursor }"
         :disabled="store.isProcessing && !canStop"
@@ -149,54 +160,92 @@ const {
   font-weight: 500;
 }
 
-/* --- 右侧按钮 --- */
+/* --- 右侧按钮区域 --- */
 .status-right {
   display: flex;
   justify-content: flex-end;
+  align-items: center; /* 确保垂直居中 */
   flex: 1;
+  gap: 12px; /* 🟢 统一间距 */
 }
 
-.action-btn {
+/* 🟢 统一的基础按钮样式 (尼康黄) */
+.nikon-btn {
+  /* 核心尺寸与排版 */
+  height: 32px; /* 🟢 强制统一高度 */
+  padding: 0 16px;
+  min-width: 90px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  
+  /* 字体 */
+  font-size: 0.85em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+
+  /* 尼康黄外观 */
   background: var(--nikon-yellow, #ffe100);
   color: #111;
   border: none;
-  padding: 6px 18px; /* 加大按钮点击区 */
-  font-size: 0.85em;
-  font-weight: 700;
-  border-radius: 4px;
+  border-radius: 4px; /* 稍微硬朗一点的圆角 */
+  
+  /* 交互 */
   cursor: pointer;
-  transition: all 0.2s;
-  min-width: 130px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  user-select: none;
 }
 
-.action-btn:hover {
-  background: #ffeb3b;
+/* 悬停效果 */
+.nikon-btn:hover:not(:disabled) {
+  background: #ffeb3b; /* 稍微亮一点的黄 */
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(0,0,0,0.3);
 }
 
-.action-btn:active {
+/* 点击按下效果 */
+.nikon-btn:active:not(:disabled) {
   transform: translateY(0);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
 
-.action-btn:disabled,
-.action-btn.processing-mode {
+/* 🚫 禁用状态 (统一灰色) */
+.nikon-btn:disabled,
+.nikon-btn.processing-mode {
   background: #333;
-  color: #666;
+  color: #555;
   cursor: not-allowed;
   box-shadow: none;
   transform: none;
+  border: 1px solid #444; /* 给禁用状态加个边框，避免融入背景 */
 }
 
-.action-btn.can-stop {
+/* 🛑 特殊状态: 批处理的"停止"模式 (红色) */
+/* 优先级要高，所以放在最后 */
+.nikon-btn.can-stop {
   background: #d32f2f;
   color: white;
+  border: none;
+  animation: pulse-red 2s infinite;
 }
-.action-btn.can-stop:hover {
+.nikon-btn.can-stop:hover {
   background: #f44336;
+}
+
+/* 可选：给单张处理加个小图标样式 */
+.icon {
+  font-weight: normal;
+  font-size: 1.1em;
+  opacity: 0.8;
+}
+
+@keyframes pulse-red {
+  0% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(211, 47, 47, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(211, 47, 47, 0); }
 }
 </style>
