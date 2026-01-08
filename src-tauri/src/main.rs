@@ -11,6 +11,7 @@ mod setup;
 mod commands;
 mod parser;
 mod batch;
+mod utils;
 
 
 use std::sync::Arc;

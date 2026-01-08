@@ -1,4 +1,6 @@
+use std::path::{ PathBuf};
 use serde::Deserialize;
+use crate::utils::calculate_target_path_core;
 
 // 字体配置（公用）
 #[derive(Debug, Clone, Deserialize)]
@@ -85,4 +87,73 @@ pub struct BatchContext {
     // 前端传来的 JSON 必须包含 "style": "BottomWhite" 等字段
     #[serde(flatten)] // 将 style 字段拉平
     pub options: StyleOptions, 
+
+    // 🟢 [新增] 导出配置
+    // 对应前端 JSON: { "options": { ... }, "export": { ... } }
+    // 注意：前端传参时，建议把 exportSettings 改名为 export 传过来，或者这里用 #[serde(rename="exportSettings")]
+    #[serde(rename="exportSettings")]
+    pub export: ExportConfig,
+}
+
+// 🟢 3. 统一路径计算逻辑 (Single Source of Truth)
+impl BatchContext {
+    pub fn calculate_target_path(&self, original_file_path: &str) -> Result<PathBuf, String> {
+        // 🟢 直接调用核心函数，传入自己的字段
+        calculate_target_path_core(
+            original_file_path, 
+            &self.export, 
+            &self.options
+        )
+    }
+}
+
+
+// 🟢 [新增] 导出配置结构体
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportConfig {
+    // 目标文件夹：Some(路径) 代表自定义，None 代表原图同级
+    pub target_dir: Option<String>, 
+    // 格式：jpg, png
+    pub format: ExportImageFormat, 
+    // 质量：1-100 (仅 JPG 有效)
+    pub quality: u8,
+}
+
+
+// 1. 定义支持的格式枚举
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "lowercase")] 
+pub enum ExportImageFormat {
+    Jpg,
+    Png,
+    // 未来想支持 WebP，只需在这里加一行：
+    // Webp, 
+}
+
+impl ExportImageFormat {
+    // 获取扩展名
+    pub fn extension(&self) -> &'static str {
+        match self {
+            Self::Jpg => "jpg",
+            Self::Png => "png",
+            // Self::Webp => "webp",
+        }
+    }
+
+    // 判断是否支持透明通道 (Alpha)
+    pub fn supports_alpha(&self) -> bool {
+        match self {
+            Self::Jpg => false, // JPG 不支持，需要转 RGB
+            Self::Png => true,
+        }
+    }
+    
+    // 可以在这里封装 MIME type
+    pub fn mime_type(&self) -> &'static str {
+         match self {
+            Self::Jpg => "image/jpeg",
+            Self::Png => "image/png",
+        }
+    }
 }

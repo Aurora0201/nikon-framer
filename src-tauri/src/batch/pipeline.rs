@@ -1,14 +1,21 @@
 // src/batch/pipline.rs
 
+use std::borrow::Cow;
+use std::fs::File;
+use std::io::BufWriter;
 use std::path::PathBuf;
 use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
 use std::time::Instant;
+use image::codecs::jpeg::JpegEncoder;
+use image::codecs::png::PngEncoder;
+use image::{ ImageEncoder};
 use tauri::{Window, State, Emitter};
 use rayon::prelude::*;
 use serde_json::json;
 use image::DynamicImage;
 
-use crate::models::StyleOptions;
+use crate::models::{ExportConfig, ExportImageFormat, StyleOptions};
+use crate::utils::calculate_target_path_core;
 use crate::{AppState};
 use crate::parser::{models::ParsedImageContext};
 use crate::processor::traits::FrameProcessor;
@@ -25,6 +32,20 @@ pub struct GlobalContext {
     pub options: StyleOptions,
     pub total_files: usize,
     pub completed_count: Arc<AtomicUsize>,
+    // 🟢 [新增] 必须把导出配置带入全局上下文
+    pub export: ExportConfig,
+}
+
+impl GlobalContext {
+    pub fn calculate_target_path(&self, original_file_path: &str) -> Result<PathBuf, String> {
+        // 🟢 同样调用核心函数，传入自己的字段
+        // 注意：GlobalContext 必须也有 export 和 options 字段
+        calculate_target_path_core(
+            original_file_path, 
+            &self.export, 
+            &self.options
+        )
+    }
 }
 
 /// 任务上下文：随单个文件流动，存放中间产物
@@ -128,24 +149,75 @@ impl PipelineStep for ProcessFrameStep {
     }
 }
 
-/// 步骤 5: 保存文件
+/// 步骤 5: 保存文件 (Pro版)
 struct SaveImageStep;
 impl PipelineStep for SaveImageStep {
     fn execute(&self, global: &GlobalContext, task: &mut TaskContext) -> Result<StepResult, String> {
-        let final_img = task.final_image.as_ref().ok_or("逻辑错误: 最终图未生成")?;
-        
-        let suffix = global.options.filename_suffix();
-        let path_obj = std::path::Path::new(&task.file_path);
-        
-        // 简单的路径计算逻辑
-        let parent = path_obj.parent().unwrap_or(std::path::Path::new("."));
-        let file_stem = path_obj.file_stem().unwrap().to_string_lossy();
-        let new_filename = format!("{}_{}.jpg", file_stem, suffix);
-        let output_path = parent.join(new_filename);
-        
-        final_img.save(&output_path).map_err(|e| format!("保存失败: {}", e))?;
-        
+        // 1. 获取处理后的图像
+        let final_img = task.final_image.as_ref()
+            .ok_or_else(|| format!("💾 [Save] 严重逻辑错误: 文件 [{}] 的最终图像未生成", task.file_path))?;
+
+        // 🟢 2. 统一路径计算 (复用逻辑)
+        // GlobalContext 中包含 export 和 options，我们需要构造一个临时的 context 或者让 helper 能够拆开用
+        // 这里假设我们给 GlobalContext 实现了类似的方法，或者直接用 BatchContext 的逻辑
+        // 既然 GlobalContext 是从 BatchContext 转换来的，最好在 GlobalContext 上也复用 calculate_target_path
+        // 这里为了演示，我们手动构造一下或者调用 helper (取决于你的架构)
+        // 假设我们在 GlobalContext 上也添加了同样的方法：
+        let output_path = global.calculate_target_path(&task.file_path)
+             .map_err(|e| format!("💾 [Save] 路径计算失败: {}", e))?;
+
+        println!("💾 [Save] 准备写入: {:?}", output_path);
+
+        // 3. 自动创建父目录
+        if let Some(parent) = output_path.parent() {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("💾 [Save] 无法创建目录 {:?}: {}", parent, e))?;
+            }
+        }
+
+        // 🟢 4. 智能图像转换 (OCP: 询问格式是否支持 Alpha)
+        // 使用 Cow (Copy on Write): 如果不需要转，就是引用，零开销；如果需要转，才复制内存
+        let img_to_save: Cow<DynamicImage> = if !global.export.format.supports_alpha() && final_img.color().has_alpha() {
+            // Log: 只有在真正发生转换时才记录，避免刷屏
+            // println!("  -> 检测到格式不支持透明度，正在转换为 RGB8..."); 
+            Cow::Owned(DynamicImage::ImageRgb8(final_img.to_rgb8()))
+        } else {
+            Cow::Borrowed(final_img)
+        };
+
+        // 5. 创建文件流
+        let file = File::create(&output_path)
+            .map_err(|e| format!("💾 [Save] 文件创建失败 {:?}: {}", output_path, e))?;
+        let mut writer = BufWriter::new(file);
+
+        // 准备参数
+        let width = img_to_save.width();
+        let height = img_to_save.height();
+        let color_type = img_to_save.color().into(); // 此时已经是正确的 ColorType (Rgb8 or Rgba8)
+
+        // 🟢 6. 编码保存 (根据 Format 枚举分发)
+        match global.export.format {
+            ExportImageFormat::Png => {
+                let encoder = PngEncoder::new(&mut writer);
+                encoder.write_image(img_to_save.as_bytes(), width, height, color_type)
+                    .map_err(|e| format!("💾 [Save] PNG 编码失败: {}", e))?;
+            },
+            ExportImageFormat::Jpg => {
+                // JPG 质量从配置读取
+                let encoder = JpegEncoder::new_with_quality(&mut writer, global.export.quality);
+                encoder.write_image(img_to_save.as_bytes(), width, height, color_type)
+                    .map_err(|e| format!("💾 [Save] JPG 编码失败: {}", e))?;
+            },
+            // OCP: 如果未来加了 WebP，编译器会在这里报错提示你处理
+        }
+
+        // 7. 更新上下文
         task.output_path = Some(output_path);
+        
+        // 成功日志 (可选，如果不希望日志太长可以去掉)
+        // println!("✅ [Save] 已保存");
+
         Ok(StepResult::Continue)
     }
 }
@@ -256,6 +328,7 @@ pub async fn start_batch_process_v3(
         options: context.options.clone(),
         total_files,
         completed_count,
+        export: context.export.clone()
     });
 
     // 3. 创建处理器策略 (Factory)
