@@ -2,6 +2,7 @@ use image::{DynamicImage, ImageBuffer, Rgba, imageops, GenericImageView};
 use ab_glyph::{Font, FontArc, PxScale};
 use imageproc::drawing::{draw_text_mut, text_size, draw_filled_rect_mut};
 use imageproc::rect::Rect;
+use log::info;
 use std::sync::Arc;
 use std::cmp::min;
 use std::time::Instant;
@@ -396,13 +397,13 @@ pub fn process<F: Font>(
         };
         draw_left_section_landscape(&mut canvas, font, &text_model, &metrics, &cfg, max_left_width);
         draw_right_section_landscape(&mut canvas, font, params, assets, w, &metrics, &cfg);
-        println!("  - [PERF] White Layout: Landscape");
+        info!("  - [PERF] White Layout: Landscape");
     } else {
         // === 竖构图 ===
         draw_portrait_layout(&mut canvas, font, &text_model, params, assets, &metrics, &cfg);
-        println!("  - [PERF] White Layout: Portrait (Logo & Line Centered | Text Offset)");
+        info!("  - [PERF] White Layout: Portrait (Logo & Line Centered | Text Offset)");
     }
 
-    println!("  - [PERF] Total Time: {:.2?}", t0.elapsed());
+    info!("  - [PERF] Total Time: {:.2?}", t0.elapsed());
     DynamicImage::ImageRgba8(canvas)
 }

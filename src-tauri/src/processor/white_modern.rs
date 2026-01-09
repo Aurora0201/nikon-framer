@@ -7,6 +7,7 @@ use imageproc::drawing::{
 };
 use imageproc::point::Point;
 use imageproc::rect::Rect;
+use log::info;
 
 use std::cmp::max;
 use std::f32::consts::PI;
@@ -402,6 +403,6 @@ pub fn process<F: Font>(
         current_badge_x += badge_w as i32 + gap_badge;
     }
 
-    println!("[PERF] WhiteModern Total: {:?}", start_total.elapsed());
+    info!("  - [PERF] WhiteModern Total: {:?}", start_total.elapsed());
     canvas
 }

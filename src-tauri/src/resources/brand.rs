@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use log::{error, info};
 use once_cell::sync::Lazy;
 use image::{DynamicImage};
 use std::fmt; // 引入格式化库
@@ -125,7 +126,7 @@ pub fn get_logo(brand: Brand, l_type: LogoType) -> Option<Arc<DynamicImage>> {
     // B. 第二步：缓存未命中，执行加载
     // 这一步涉及文件解码，相对耗时
     if let Some(data) = key.load_data() {
-        println!("📦 [Resources] 首次加载 Logo: {:?} - {:?}", brand, l_type);
+        info!("📦 [Resources] 首次加载 Logo: {:?} - {:?}", brand, l_type);
         
         // 解码图片 (支持 png, jpg 等格式)
         if let Ok(img) = image::load_from_memory(data) {
@@ -137,12 +138,12 @@ pub fn get_logo(brand: Brand, l_type: LogoType) -> Option<Arc<DynamicImage>> {
             
             return Some(arc_img);
         } else {
-            eprintln!("❌ [Resources] 图片解码失败: {:?} - {:?}", brand, l_type);
+            error!("❌ [Resources] 图片解码失败: {:?} - {:?}", brand, l_type);
         }
     } else {
         // 如果 load_data 返回 None (说明该品牌该类型没有定义资源)
         // 可以在这里打印日志方便调试
-        println!("⚠️ [Resources] 未定义的 Logo 资源: {:?} - {:?}", brand, l_type);
+        info!("⚠️ [Resources] 未定义的 Logo 资源: {:?} - {:?}", brand, l_type);
     }
 
     None

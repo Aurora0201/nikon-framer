@@ -2,6 +2,7 @@ use image::{DynamicImage, Rgba, GenericImageView, RgbaImage};
 use ab_glyph::{Font, FontArc, PxScale};
 use imageproc::drawing::{draw_text_mut, draw_filled_rect_mut};
 use imageproc::rect::Rect;
+use log::info;
 use std::cmp::max;
 use std::time::Instant;
 use rayon::prelude::*;
@@ -183,7 +184,7 @@ pub fn process<F: Font>(
     let start_compose = Instant::now();
     let canvas_buffer = fast_compose_white_canvas(img, border_size, bottom_height);
     let mut canvas = DynamicImage::ImageRgba8(canvas_buffer);
-    println!("[PERF] WhiteMaster Compose: {:?}", start_compose.elapsed());
+    info!("  - [PERF] WhiteMaster Compose: {:?}", start_compose.elapsed());
 
     let (canvas_w, canvas_h) = canvas.dimensions();
 
@@ -266,7 +267,7 @@ pub fn process<F: Font>(
     draw_separator(&mut canvas, center_x, sep_center_y, sep_actual_h, sep_color);
     draw_separator(&mut canvas, center_x + gap, sep_center_y, sep_actual_h, sep_color);
 
-    println!("[PERF] WhiteMaster Total: {:?}", start_total.elapsed());
+    info!("  - [PERF] WhiteMaster Total: {:?}", start_total.elapsed());
 
     canvas
 }

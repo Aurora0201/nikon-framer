@@ -1,3 +1,4 @@
+use log::{error, info};
 use tauri::State;
 use std::{ sync::{Arc, atomic::Ordering}};
 use crate::{graphics::load_image_auto_rotate, models::{BatchContext, ExportConfig, StyleOptions}, state::AppState, utils::calculate_target_path_core};
@@ -74,11 +75,11 @@ pub fn filter_unprocessed_files(
     paths: Vec<String>, 
     context: BatchContext 
 ) -> Vec<String> {
-    println!("🔍 [Filter] 开始检查 {} 个文件...", paths.len());
+    info!("🔍 [Filter] 开始检查 {} 个文件...", paths.len());
 
     // 1. OCP: 检查可编辑模式
     if context.options.is_editable() {
-        println!("⚡ [Filter] 检测到可编辑模式 ({:?})，强制全量处理。", context.options);
+        info!("⚡ [Filter] 检测到可编辑模式 ({:?})，强制全量处理。", context.options);
         return paths;
     }
 
@@ -94,7 +95,6 @@ pub fn filter_unprocessed_files(
                     // 文件存在，跳过
                     skipped_count += 1;
                     // 可选：如果需要调试，可以打印跳过了谁
-                    // println!("  -> 跳过已存在: {:?}", target_path);
                 } else {
                     // 文件不存在，加入待处理列表
                     to_process.push(path_str.clone());
@@ -102,7 +102,7 @@ pub fn filter_unprocessed_files(
             },
             Err(e) => {
                 // 🔴 错误处理：路径计算失败（极少发生），但也需要记录
-                eprintln!("⚠️ [Filter] 路径计算错误 [{}]: {}", path_str, e);
+                error!("⚠️ [Filter] 路径计算错误 [{}]: {}", path_str, e);
                 // 策略：如果算不出目标路径，为了保险起见，建议加入待处理列表，或者跳过
                 // 这里选择加入，让 pipeline 去处理并报错，避免静默失败
                 to_process.push(path_str.clone());
@@ -111,7 +111,7 @@ pub fn filter_unprocessed_files(
         }
     }
 
-    println!(
+    info!(
         "✅ [Filter] 完成: 输入 {} -> 需处理 {} (跳过 {}, 异常 {})", 
         paths.len(), to_process.len(), skipped_count, error_count
     );

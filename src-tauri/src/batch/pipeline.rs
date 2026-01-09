@@ -9,6 +9,7 @@ use std::time::Instant;
 use image::codecs::jpeg::JpegEncoder;
 use image::codecs::png::PngEncoder;
 use image::{ ImageEncoder};
+use log::info;
 use tauri::{Window, State, Emitter};
 use rayon::prelude::*;
 use serde_json::json;
@@ -166,7 +167,7 @@ impl PipelineStep for SaveImageStep {
         let output_path = global.calculate_target_path(&task.file_path)
              .map_err(|e| format!("💾 [Save] 路径计算失败: {}", e))?;
 
-        println!("💾 [Save] 准备写入: {:?}", output_path);
+        info!("💾 [Save] 准备写入: {:?}", output_path);
 
         // 3. 自动创建父目录
         if let Some(parent) = output_path.parent() {
@@ -180,7 +181,7 @@ impl PipelineStep for SaveImageStep {
         // 使用 Cow (Copy on Write): 如果不需要转，就是引用，零开销；如果需要转，才复制内存
         let img_to_save: Cow<DynamicImage> = if !global.export.format.supports_alpha() && final_img.color().has_alpha() {
             // Log: 只有在真正发生转换时才记录，避免刷屏
-            // println!("  -> 检测到格式不支持透明度，正在转换为 RGB8..."); 
+            info!("  -> 检测到格式不支持透明度，正在转换为 RGB8..."); 
             Cow::Owned(DynamicImage::ImageRgb8(final_img.to_rgb8()))
         } else {
             Cow::Borrowed(final_img)
@@ -215,9 +216,6 @@ impl PipelineStep for SaveImageStep {
         // 7. 更新上下文
         task.output_path = Some(output_path);
         
-        // 成功日志 (可选，如果不希望日志太长可以去掉)
-        // println!("✅ [Save] 已保存");
-
         Ok(StepResult::Continue)
     }
 }
@@ -309,7 +307,7 @@ pub async fn start_batch_process_v3(
     context: crate::models::BatchContext, // 确保这个结构体是公有的
 ) -> Result<String, String> {
     
-    println!("🚀 [API V3] Pipeline Mode Started ({} files)", file_paths.len());
+    info!("🚀 [API V3] Pipeline Mode Started ({} files)", file_paths.len());
 
     // 1. 准备全局状态
     let state_arc = (*state).clone();
@@ -366,7 +364,7 @@ pub async fn start_batch_process_v3(
         return Ok("Stopped by user".to_string());
     }
 
-    println!("✨ [API V3] Batch Complete in {:.2?}", duration);
+    info!("✨ [API V3] Batch Complete in {:.2?}", duration);
     window.emit("process-status", "finished").map_err(|e| e.to_string())?;
 
     Ok(format!("Done in {:.2?}", duration))

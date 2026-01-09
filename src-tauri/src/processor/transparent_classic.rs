@@ -2,6 +2,7 @@ use image::{DynamicImage, GenericImageView, Rgba, imageops};
 use ab_glyph::{Font, FontArc, PxScale};
 // 🟢 1. 引入 draw_text_mut
 use imageproc::drawing::{text_size, draw_text_mut};
+use log::info;
 use std::time::Instant;
 use std::sync::Arc;
 use std::cmp::min;
@@ -144,7 +145,7 @@ pub fn process<F: Font>(
         cfg.bg_brightness 
     ).to_rgba8(); // 注意：generate 返回 DynamicImage，这里转为 RgbaImage
 
-    println!("  - [PERF] Blur Background: {:.2?}", t_blur.elapsed());
+    info!("  - [PERF] Blur Background: {:.2?}", t_blur.elapsed());
 
     // -------------------------------------------------------------
     // C. 前景合成 (应用玻璃效果 + 投影)
@@ -305,6 +306,6 @@ pub fn process<F: Font>(
         );
     }
 
-    println!("  - [PERF] Blur Total Time: {:.2?}", t0.elapsed());
+    info!("  - [PERF] Blur Total Time: {:.2?}", t0.elapsed());
     DynamicImage::ImageRgba8(canvas)
 }

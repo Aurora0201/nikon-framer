@@ -3,6 +3,7 @@
 use image::{DynamicImage, Rgba, GenericImageView, imageops};
 use ab_glyph::{Font, FontArc, PxScale};
 use imageproc::drawing::{draw_text_mut, draw_line_segment_mut};
+use log::info;
 use std::{time::Instant};
 
 use crate::{graphics::generate_blurred_background, parser::models::ParsedImageContext, processor::traits::FrameProcessor};
@@ -130,7 +131,7 @@ pub fn process<F: Font>(
         -15 
     );
     
-    println!("[PERF] Master Bg Generation: {:?}", start_bg.elapsed());
+    info!("  - [PERF] Master Bg Generation: {:?}", start_bg.elapsed());
 
     let start_overlay = Instant::now();
 
@@ -213,8 +214,8 @@ pub fn process<F: Font>(
     draw_separator(&mut canvas, center_x, sep_center_y, sep_actual_h, sep_color);
     draw_separator(&mut canvas, center_x + gap, sep_center_y, sep_actual_h, sep_color);
 
-    println!("[PERF] Master Layout: {:?}", start_overlay.elapsed());
-    println!("[PERF] Master Total: {:?}", start_total.elapsed());
+    info!("  - [PERF] Master Layout: {:?}", start_overlay.elapsed());
+    info!("  - [PERF] Master Total: {:?}", start_total.elapsed());
 
     canvas
 }

@@ -3,6 +3,7 @@ use std::sync::{Mutex};
 use std::path::{Path, PathBuf};
 use std::fs;
 use ab_glyph::FontArc;
+use log::{error, info};
 use once_cell::sync::Lazy;
 
 
@@ -19,7 +20,7 @@ static FONT_BASE_DIR: Lazy<Mutex<Option<PathBuf>>> = Lazy::new(|| {
 pub fn init_font_path(path: PathBuf) {
     let mut dir = FONT_BASE_DIR.lock().unwrap();
     *dir = Some(path);
-    println!("✅ [Resources] 字体路径已初始化");
+    info!("✅ [Resources] 字体路径已初始化");
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -98,20 +99,20 @@ pub fn get_font(family: FontFamily, weight: FontWeight) -> FontArc {
             .join(filename);
 
         if source_path.exists() {
-            println!("⚠️ [Resources] 首选路径缺失，回退到源码目录加载: {:?}", source_path);
+            info!("⚠️ [Resources] 首选路径缺失，回退到源码目录加载: {:?}", source_path);
             source_path
         } else {
             primary_path 
         }
     };
 
-    println!("📦 [LazyLoad] Font: {:?} -> {:?}", key, final_path);
+    info!("📦 [LazyLoad] Font: {:?} -> {:?}", key, final_path);
 
     // 5. 读取文件字节
     let data = fs::read(&final_path).unwrap_or_else(|e| {
-        eprintln!("❌ 严重错误: 无法读取字体文件!");
-        eprintln!("   - 尝试路径: {:?}", final_path);
-        eprintln!("   - 系统错误: {}", e);
+        error!("❌ 严重错误: 无法读取字体文件!");
+        error!("   - 尝试路径: {:?}", final_path);
+        error!("   - 系统错误: {}", e);
         // 如果读不到文件，这里可以 Panic，或者返回一个内嵌的 Fallback 字体
         // 这里暂时 panic，因为没有字体后续无法工作
         panic!("无法加载核心字体资源: {:?}", final_path);
@@ -120,8 +121,8 @@ pub fn get_font(family: FontFamily, weight: FontWeight) -> FontArc {
     // 6. 🟢 [核心修改] 将字节解析为 FontArc
     // FontArc::try_from_vec 会接管 data 的所有权，不会发生拷贝
     let font = FontArc::try_from_vec(data).unwrap_or_else(|_| {
-        eprintln!("❌ 严重错误: 字体文件格式损坏!");
-        eprintln!("   - 路径: {:?}", final_path);
+        error!("❌ 严重错误: 字体文件格式损坏!");
+        error!("   - 路径: {:?}", final_path);
         panic!("无法解析字体文件");
     });
 

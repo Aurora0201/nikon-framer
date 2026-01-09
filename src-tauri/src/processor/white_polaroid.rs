@@ -2,6 +2,7 @@ use image::{DynamicImage, Rgba, RgbaImage, imageops, GenericImageView};
 use ab_glyph::{Font, FontArc, PxScale};
 // 🟢 1. 引入标准绘图函数 draw_text_mut
 use imageproc::drawing::{text_size, draw_text_mut};
+use log::info;
 use std::sync::Arc;
 use std::time::Instant;
 use std::cmp::min;
@@ -204,6 +205,6 @@ pub fn process<F: Font>(
         );
     }
 
-    println!("  - [PERF] Polaroid Process: {:.2?}", t0.elapsed());
+    info!("  - [PERF] Polaroid Process: {:.2?}", t0.elapsed());
     DynamicImage::ImageRgba8(canvas)
 }
