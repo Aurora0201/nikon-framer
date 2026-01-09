@@ -214,6 +214,7 @@ export const store = reactive({
     if (!this.activeFilePath && this.fileQueue.length > 0) {
       this.activeFilePath = this.fileQueue[0].path;
     }
+    return formattedFiles.length
   },
 
   // 🟢 队列管理：移除文件
