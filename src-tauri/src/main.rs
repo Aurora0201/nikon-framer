@@ -1,5 +1,4 @@
 // 声明所有顶层模块
-mod metadata;
 mod resources;
 mod processor;
 mod debug;
@@ -12,6 +11,7 @@ mod commands;
 mod parser;
 mod batch;
 mod utils;
+mod error;
 
 
 use std::sync::Arc;
@@ -57,8 +57,8 @@ fn main() {
             // 其他遗留命令
             commands::read_local_image_blob,
             commands::generate_thumbnail,
-            metadata::filter_files,
-            metadata::scan_folder,
+            commands::filter_files,
+            commands::scan_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
