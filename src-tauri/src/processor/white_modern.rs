@@ -1,5 +1,5 @@
 use image::{DynamicImage, Rgba, GenericImageView, RgbaImage, imageops};
-use ab_glyph::{FontRef, PxScale};
+use ab_glyph::{Font, FontArc, PxScale};
 use imageproc::drawing::{
     draw_text_mut, 
     draw_filled_rect_mut,
@@ -7,10 +7,10 @@ use imageproc::drawing::{
 };
 use imageproc::point::Point;
 use imageproc::rect::Rect;
+use log::info;
 
 use std::cmp::max;
-use std::f32::consts::PI; 
-use std::sync::Arc;
+use std::f32::consts::PI;
 use std::time::Instant;
 use rayon::prelude::*; 
 
@@ -26,22 +26,16 @@ use crate::processor::traits::FrameProcessor;
 // 策略 6: 现代白底处理器 (WhiteModern)
 // ==========================================
 pub struct WhiteModernProcessor {
-    pub font_bold: Arc<Vec<u8>>,
-    pub font_regular: Arc<Vec<u8>>,
-    pub font_medium: Arc<Vec<u8>>, 
+    pub font_bold: FontArc,
+    pub font_regular: FontArc,
+    pub font_medium: FontArc, 
     // 🟢 1. 新增手写字体字段
-    pub font_script: Arc<Vec<u8>>, 
+    pub font_script: FontArc, 
     
 }
 
 impl FrameProcessor for WhiteModernProcessor {
     fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
-        let bold = FontRef::try_from_slice(&self.font_bold).unwrap();
-        let medium = FontRef::try_from_slice(&self.font_medium).unwrap();
-        let regular = FontRef::try_from_slice(&self.font_regular).unwrap();
-        // 🟢 2. 加载手写字体
-        let script = FontRef::try_from_slice(&self.font_script)
-             .map_err(|_| "WhiteModern: Birthstone 字体加载失败")?;
 
         let input = WhiteModernInput {
             brand: ctx.brand.to_string(),
@@ -57,7 +51,15 @@ impl FrameProcessor for WhiteModernProcessor {
         };
 
         // 🟢 3. 传入 script 字体
-        Ok(process(img, input, &assets, &bold, &medium, &regular, &script))
+        Ok(process(
+            img, 
+            input,
+            &assets, 
+            &self.font_bold, 
+            &self.font_medium, 
+            &self.font_regular, 
+            &self.font_script
+        ))
     }
 }
 
@@ -212,11 +214,11 @@ fn draw_rounded_rect_mut_polyfill(canvas: &mut DynamicImage, rect: Rect, radius:
     draw_polygon_mut(canvas, &points, color);
 }
 
-fn draw_centered_text_in_rect_fixed(
+fn draw_centered_text_in_rect_fixed<F: Font>(
     canvas: &mut DynamicImage, 
     text: &str, 
     rect: Rect, 
-    font: &FontRef, 
+    font: &F, 
     size: f32, 
     color: Rgba<u8>,
     nudge_ratio: f32,
@@ -241,14 +243,14 @@ fn draw_centered_text_in_rect_fixed(
 // 4. 核心处理逻辑
 // ==========================================
 
-pub fn process(
+pub fn process<F: Font>(
     img: &DynamicImage,
     input: WhiteModernInput,
     _assets: &WhiteModernResources,
-    font_bold: &FontRef,    
-    font_medium: &FontRef, 
-    font_regular: &FontRef, 
-    font_script: &FontRef,  
+    font_bold: &F,    
+    font_medium: &F, 
+    font_regular: &F, 
+    font_script: &F,  
 ) -> DynamicImage {
     let start_total = Instant::now();
     let cfg = WhiteModernLayoutConfig::default();
@@ -401,6 +403,6 @@ pub fn process(
         current_badge_x += badge_w as i32 + gap_badge;
     }
 
-    println!("[PERF] WhiteModern Total: {:?}", start_total.elapsed());
+    info!("  - [PERF] WhiteModern Total: {:?}", start_total.elapsed());
     canvas
 }

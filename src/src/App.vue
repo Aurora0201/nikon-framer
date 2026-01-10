@@ -67,7 +67,7 @@ useGlobalEvents();
   min-height: 0; 
   
   display: grid;
-  grid-template-columns: 240px 220px minmax(0, 1fr);
+  grid-template-columns: 280px 220px minmax(0, 1fr);
   gap: 2px;
   
   /* 容器样式 */

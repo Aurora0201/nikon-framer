@@ -37,7 +37,7 @@ export const basicFrames = {
 
   // Transparent
   'TransparentClassic': defineStaticFrame('Transparent', '透明磨砂', '经典系列，底部附带机型和摄影参数','transparent_classic.jpg'),
-  'TransparentMaster': defineStaticFrame('Transparent', '透明大师磨砂', '经典系列，底部附带机型和摄影参数','transparent_standard.jpg'),
+  'TransparentMaster': defineStaticFrame('Transparent', '透明大师磨砂', '经典系列，底部附带机型和摄影参数','transparent_master.jpg'),
   
   // ... 其他
 };

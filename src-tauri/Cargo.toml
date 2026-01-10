@@ -1,6 +1,6 @@
 [package]
 name = "nikon-framer"
-version = "1.1.0"
+version = "2.0.1"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -36,3 +36,6 @@ imageproc = "0.25.0"
 ab_glyph = "0.2.32"
 once_cell = "1.18"
 rayon = "1.10" # 请使用最新版本
+log = "0.4"
+tauri-plugin-log = "2.0" # 确保版本与你的 tauri 版本兼容
+thiserror = "1.0"

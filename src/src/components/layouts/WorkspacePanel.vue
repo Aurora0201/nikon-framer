@@ -6,6 +6,8 @@ import { store } from '../../store/index.js';
 import { usePreviewLogic } from '../../composables/usePreviewLogic';
 import PreviewCanvas from '../workspace/PreviewCanvas.vue';
 import WorkspaceFooter from '../workspace/WorkspaceFooter.vue';
+// 🟢 1. 引入新组件
+import ExportSettings from '../workspace/ExportSettings.vue';
 
 const { frozenDisplay, isBusy, handleImgLoad, handleImgError } = usePreviewLogic();
 const canvasRef = ref(null);
@@ -13,6 +15,8 @@ const handleReset = () => canvasRef.value?.resetView();
 
 const footerHeight = ref(240);
 const isDragging = ref(false);
+// 🟢 2. 状态控制 ('preview' | 'settings')
+const currentTab = ref('preview');
 
 const startResize = () => {
   isDragging.value = true;
@@ -43,26 +47,49 @@ const stopResize = () => {
   <div class="workspace-panel-container">
     
     <div class="workspace-header">
-      <span class="tab active">👁️ 实时预览</span>
-      <span class="tab">⚙️ 导出设置</span>
+      <span 
+        class="tab" 
+        :class="{ active: currentTab === 'preview' }"
+        @click="currentTab = 'preview'"
+      >
+        👁️ 实时预览
+      </span>
+      <span 
+        class="tab" 
+        :class="{ active: currentTab === 'settings' }"
+        @click="currentTab = 'settings'"
+      >
+        ⚙️ 导出设置
+      </span>
+      
       <button class="reset-btn" @click="handleReset" title="重置视图">↺</button>
     </div>
 
     <div class="workspace-body">
-      <PreviewCanvas 
-        ref="canvasRef"
-        :display-data="frozenDisplay" 
-        :is-busy="isBusy"
-        @img-load="handleImgLoad"
-        @img-error="handleImgError"
-      />
+      <KeepAlive>
+        <PreviewCanvas 
+          v-if="currentTab === 'preview'"
+          ref="canvasRef"
+          :display-data="frozenDisplay" 
+          :is-busy="isBusy"
+          @img-load="handleImgLoad"
+          @img-error="handleImgError"
+        />
+        <ExportSettings v-else />
+      </KeepAlive>
     </div>
 
-    <div class="resize-handle" @mousedown="startResize">
+    <div 
+      v-if="currentTab === 'preview'"
+      class="resize-handle" 
+      @mousedown="startResize">
       <div class="handle-bar"></div>
     </div>
 
-    <div class="workspace-footer-wrapper" :style="{ height: footerHeight + 'px' }">
+    <div 
+      v-if="currentTab === 'preview'"
+      class="workspace-footer-wrapper" 
+      :style="{ height: footerHeight + 'px' }">
       <WorkspaceFooter :active-preset-id="store.activePresetId" />
     </div>
 

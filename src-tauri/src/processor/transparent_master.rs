@@ -1,9 +1,10 @@
 // src/processor/master.rs
 
 use image::{DynamicImage, Rgba, GenericImageView, imageops};
-use ab_glyph::{FontRef, PxScale};
+use ab_glyph::{Font, FontArc, PxScale};
 use imageproc::drawing::{draw_text_mut, draw_line_segment_mut};
-use std::{sync::Arc, time::Instant};
+use log::info;
+use std::{time::Instant};
 
 use crate::{graphics::generate_blurred_background, parser::models::ParsedImageContext, processor::traits::FrameProcessor};
 
@@ -14,17 +15,13 @@ use crate::{graphics::generate_blurred_background, parser::models::ParsedImageCo
 // 策略 3: 大师透明处理器 (TransparentMaster)
 // ==========================================
 pub struct TransparentMasterProcessor {
-    pub main_font: Arc<Vec<u8>>,   // 参数字体
-    pub script_font: Arc<Vec<u8>>, // 手写体
-    pub serif_font: Arc<Vec<u8>>,  // 标题体
+    pub main_font: FontArc,   // 参数字体
+    pub script_font: FontArc, // 手写体
+    pub serif_font: FontArc,  // 标题体
 }
 
 impl FrameProcessor for TransparentMasterProcessor {
     fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
-        let main = FontRef::try_from_slice(&self.main_font).unwrap();
-        let script = FontRef::try_from_slice(&self.script_font).unwrap();
-        let serif = FontRef::try_from_slice(&self.serif_font).unwrap();
-
         // 构造输入数据
         let input = TransparentMasterInput {
             iso: ctx.params.iso.map(|v| v.to_string()).unwrap_or_default(),
@@ -39,9 +36,9 @@ impl FrameProcessor for TransparentMasterProcessor {
         Ok(process(
             img, 
             input, 
-            &main, 
-            &script, 
-            &serif
+            &self.main_font, 
+            &self.script_font, 
+            &self.serif_font
         ))
     }
 }
@@ -102,12 +99,12 @@ impl MasterLayoutConfig {
 // ==========================================
 // 3. 核心处理逻辑
 // ==========================================
-pub fn process(
+pub fn process<F: Font>(
     img: &DynamicImage,
     input: TransparentMasterInput,    // 🟢 [修改] 接收结构化数据
-    main_font: &FontRef,   
-    script_font: &FontRef, 
-    serif_font: &FontRef,  
+    main_font: &F,   
+    script_font: &F, 
+    serif_font: &F,  
 ) -> DynamicImage {
     let start_total = Instant::now();
     let cfg = MasterLayoutConfig::default();
@@ -134,7 +131,7 @@ pub fn process(
         -15 
     );
     
-    println!("[PERF] Master Bg Generation: {:?}", start_bg.elapsed());
+    info!("  - [PERF] Master Bg Generation: {:?}", start_bg.elapsed());
 
     let start_overlay = Instant::now();
 
@@ -217,14 +214,14 @@ pub fn process(
     draw_separator(&mut canvas, center_x, sep_center_y, sep_actual_h, sep_color);
     draw_separator(&mut canvas, center_x + gap, sep_center_y, sep_actual_h, sep_color);
 
-    println!("[PERF] Master Layout: {:?}", start_overlay.elapsed());
-    println!("[PERF] Master Total: {:?}", start_total.elapsed());
+    info!("  - [PERF] Master Layout: {:?}", start_overlay.elapsed());
+    info!("  - [PERF] Master Total: {:?}", start_total.elapsed());
 
     canvas
 }
 
 
-fn draw_wide_text(canvas: &mut DynamicImage, center_x: i32, y: i32, text: &str, font: &FontRef, size: f32, color: Rgba<u8>) {
+fn draw_wide_text<F: Font>(canvas: &mut DynamicImage, center_x: i32, y: i32, text: &str, font: &F, size: f32, color: Rgba<u8>) {
     let scale = PxScale { x: size, y: size };
     let tracking = size * 0.4; 
     let mut total_width = 0.0;
@@ -241,7 +238,7 @@ fn draw_wide_text(canvas: &mut DynamicImage, center_x: i32, y: i32, text: &str, 
     }
 }
 
-fn draw_column_absolute(canvas: &mut DynamicImage, x: i32, val_y: i32, lbl_y: i32, value: &str, label: &str, font: &FontRef, val_size: f32, lbl_size: f32, val_color: Rgba<u8>, lbl_color: Rgba<u8>) {
+fn draw_column_absolute<F: Font>(canvas: &mut DynamicImage, x: i32, val_y: i32, lbl_y: i32, value: &str, label: &str, font: &F, val_size: f32, lbl_size: f32, val_color: Rgba<u8>, lbl_color: Rgba<u8>) {
     draw_centered_text(canvas, value, x, val_y, font, PxScale { x: val_size, y: val_size }, val_color);
     draw_centered_text(canvas, label, x, lbl_y, font, PxScale { x: lbl_size, y: lbl_size }, lbl_color);
 }
@@ -252,7 +249,7 @@ fn draw_separator(canvas: &mut DynamicImage, x: i32, center_y: f32, height: f32,
     draw_line_segment_mut(canvas, (x as f32, start_y), (x as f32, end_y), color);
 }
 
-fn draw_centered_text(canvas: &mut DynamicImage, text: &str, x: i32, y: i32, font: &FontRef, scale: PxScale, color: Rgba<u8>) {
+fn draw_centered_text<F: Font>(canvas: &mut DynamicImage, text: &str, x: i32, y: i32, font: &F, scale: PxScale, color: Rgba<u8>) {
     let (text_w, _text_h) = imageproc::drawing::text_size(scale, font, text);
     let draw_x = x - (text_w as i32 / 2);
     draw_text_mut(canvas, color, draw_x, y, scale, font, text);

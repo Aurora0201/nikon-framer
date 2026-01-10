@@ -39,6 +39,15 @@ export const store = reactive({
 
   // 🟢 新增：存储底图的真实物理尺寸
   imageDimensions: { width: 0, height: 0 },
+
+  // 🟢 [新增] 导出全局设置
+  exportSettings: {
+    pathMode: 'original', // 'original' | 'custom'
+    customPath: '',       // 自定义输出目录
+    format: 'jpg',        // 'jpg' | 'png' | 'webp'
+    quality: 90,          // 1-100 (仅 JPG/WebP)
+    resize: 'none',       // 'none' | 'short-2048' | 'short-4096' (预留)
+  },
   // =========================================
   // Getters (计算属性)
   // =========================================
@@ -101,6 +110,13 @@ export const store = reactive({
   // =========================================
   // Actions (方法)
   // =========================================
+
+  // 🟢 [新增] 设置自定义导出目录 (配合 open dialog)
+  setExportPath(path) {
+    this.exportSettings.customPath = path;
+    this.exportSettings.pathMode = 'custom';
+  },
+
   // 🟢 [核心 Action] 切换模式时，加载该模式的默认参数
   loadModeParams(presetId) {
     const config = frameRegistry.get(presetId);
@@ -198,6 +214,7 @@ export const store = reactive({
     if (!this.activeFilePath && this.fileQueue.length > 0) {
       this.activeFilePath = this.fileQueue[0].path;
     }
+    return formattedFiles.length
   },
 
   // 🟢 队列管理：移除文件

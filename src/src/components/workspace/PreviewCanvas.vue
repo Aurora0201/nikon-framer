@@ -160,8 +160,14 @@ defineExpose({ resetView });
   align-items: center;
   
   transform-origin: center center;
-  will-change: transform;
+  /* will-change: transform; */
+
+  /* 🟢 告诉浏览器使用高质量缩放 (主要针对 Chrome/Edge) */
+  image-rendering: -webkit-optimize-contrast; /* 旧版 Chrome */
+  image-rendering: high-quality; /* 现代浏览器标准 */
   
+  /* 防止某些浏览器默认使用了 pixelated (像素化) */
+  image-rendering: auto;
 }
 
 /* 🟢 [关键修复 2] 图片还原真身 */
@@ -174,6 +180,7 @@ defineExpose({ resetView });
   
   box-shadow: 0 50px 100px rgba(0,0,0,0.5); /* 阴影大一点，因为图片本身很大 */
   pointer-events: none; 
+  
 }
 
 .status-badge { position: absolute; top: 20px; right: 20px; padding: 6px 12px; border-radius: 4px; font-size: 0.8em; font-weight: bold; color: white; z-index: 10; pointer-events: none; }
