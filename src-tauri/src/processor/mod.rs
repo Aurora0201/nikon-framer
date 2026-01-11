@@ -1,12 +1,9 @@
 // 1. 声明子模块
-pub mod white_classic;
 pub mod transparent_classic;
 pub mod traits;
-pub mod transparent_master;
-pub mod white_polaroid;
-pub mod white_master;
-pub mod white_modern; // 🟢
+pub mod transparent_master;// 🟢
 pub mod signature;
+pub mod white;
 use image::{DynamicImage, imageops};
 
 
@@ -16,15 +13,15 @@ use crate::processor::signature::SignatureProcessor;
 use crate::processor::traits::FrameProcessor; 
 
 use crate::processor::transparent_master::TransparentMasterProcessor;
-use crate::processor::white_classic::WhiteClassicProcessor;
-use crate::processor::white_master::WhiteMasterProcessor;
+use crate::processor::white::white_classic_v2::WhiteClassicProcessorV2;
+use crate::processor::white::white_master_v2::WhiteMasterProcessorV2;
+use crate::processor::white::white_modern_v2::WhiteModernProcessorV2;
+use crate::processor::white::white_polaroid_v2::WhitePolaroidProcessorV2;
 // 引入资源管理
 use crate::resources::{self, FontFamily, FontWeight};
 
 // 引入各处理器的特定结构体 (Input & Resources)
 use crate::processor::transparent_classic::TransparentClassicProcessor;
-use crate::processor::white_polaroid::WhitePolaroidProcessor;
-use crate::processor::white_modern::WhiteModernProcessor;
 
 
 // --- 公共辅助函数 ---
@@ -42,7 +39,7 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
         
         // 1. 极简白底模式
         StyleOptions::WhiteClassic => {
-            Box::new(WhiteClassicProcessor { 
+            Box::new(WhiteClassicProcessorV2 { 
                 font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold) 
             })
         },
@@ -65,14 +62,14 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
 
         // 4. 拍立得模式
         StyleOptions::WhitePolaroid => {
-            Box::new(WhitePolaroidProcessor {
+            Box::new(WhitePolaroidProcessorV2 {
                 font_data: resources::get_font(FontFamily::InterDisplay, FontWeight::Medium),
             })
         },
 
         // 5. 大师白底模式 (🟢 新增)
         StyleOptions::WhiteMaster => {
-            Box::new(WhiteMasterProcessor {
+            Box::new(WhiteMasterProcessorV2 {
                 main_font: resources::get_font(FontFamily::InterDisplay, FontWeight::Medium),
                 script_font: resources::get_font(FontFamily::MrDafoe, FontWeight::Regular),
                 serif_font: resources::get_font(FontFamily::AbhayaLibre, FontWeight::Medium),
@@ -80,7 +77,7 @@ pub fn create_processor(options: &StyleOptions) -> Box<dyn FrameProcessor + Send
         },
 
         StyleOptions::WhiteModern => {
-            Box::new(WhiteModernProcessor {
+            Box::new(WhiteModernProcessorV2 {
                 // Modern 风格建议搭配无衬线字体
                 font_bold: resources::get_font(FontFamily::InterDisplay, FontWeight::Bold),
                 font_medium: resources::get_font(FontFamily::InterDisplay, FontWeight::Medium),
