@@ -6,7 +6,7 @@ use imageproc::drawing::{draw_text_mut, draw_line_segment_mut};
 use log::info;
 use std::{time::Instant};
 
-use crate::{graphics::generate_blurred_background, parser::models::ParsedImageContext, processor::traits::FrameProcessor};
+use crate::{error::AppError, graphics::generate_blurred_background, parser::models::ParsedImageContext, processor::traits::FrameProcessor};
 
 // ==========================================
 // 1. 数据结构定义
@@ -21,7 +21,7 @@ pub struct TransparentMasterProcessor {
 }
 
 impl FrameProcessor for TransparentMasterProcessor {
-    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, AppError> {
         // 构造输入数据
         let input = TransparentMasterInput {
             iso: ctx.params.iso.map(|v| v.to_string()).unwrap_or_default(),
