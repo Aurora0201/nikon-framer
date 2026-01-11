@@ -6,6 +6,7 @@ use log::info;
 use std::time::Instant;
 use std::sync::Arc;
 use std::cmp::min;
+use crate::error::AppError;
 use crate::graphics::effects::generate_blurred_background;
 // 🟢 新增引入
 use crate::graphics::shadow::ShadowProfile;
@@ -28,7 +29,7 @@ pub struct TransparentClassicProcessor {
 }
 
 impl FrameProcessor for TransparentClassicProcessor {
-    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, String> {
+    fn process(&self, img: &DynamicImage, ctx: &ParsedImageContext) -> Result<DynamicImage, AppError> {
         let assets = BlurStyleResources {
             logo: resources::get_logo(ctx.brand, LogoType::Wordmark),
         };

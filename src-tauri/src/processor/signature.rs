@@ -1,6 +1,7 @@
 use image::{DynamicImage, Rgba};
 use imageproc::drawing::draw_text_mut;
 use ab_glyph::{Font, FontArc, PxScale, ScaleFont};
+use crate::error::AppError;
 use crate::parser::models::ParsedImageContext;
 use crate::processor::traits::FrameProcessor;
 use crate::graphics::{self, calculate_browser_baseline_offset, calculate_corrected_font_size};
@@ -17,7 +18,7 @@ impl FrameProcessor for SignatureProcessor {
         &self,
         img: &DynamicImage,
         _ctx: &ParsedImageContext
-    ) -> Result<DynamicImage, String> {
+    ) -> Result<DynamicImage, AppError> {
         
         let mut canvas = img.clone();
         let width = canvas.width();
