@@ -1,12 +1,14 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
-// 🟢 路径修正：确保指向 store/index.js
+import { ref } from 'vue';
 import { store } from '../../store/index.js'; 
+
+// 🟢 [Tauri V2 适配] 引入新的 Shell 插件路径
+// 如果你还在用 V1，请改回 '@tauri-apps/api/shell'
+import { open } from '@tauri-apps/plugin-shell';
 
 import { usePreviewLogic } from '../../composables/usePreviewLogic';
 import PreviewCanvas from '../workspace/PreviewCanvas.vue';
 import WorkspaceFooter from '../workspace/WorkspaceFooter.vue';
-// 🟢 1. 引入新组件
 import ExportSettings from '../workspace/ExportSettings.vue';
 
 const { frozenDisplay, isBusy, handleImgLoad, handleImgError } = usePreviewLogic();
@@ -15,8 +17,17 @@ const handleReset = () => canvasRef.value?.resetView();
 
 const footerHeight = ref(240);
 const isDragging = ref(false);
-// 🟢 2. 状态控制 ('preview' | 'settings')
 const currentTab = ref('preview');
+
+// 🔗 打开 GitHub 链接的函数 (Tauri 安全方式)
+const openGithub = async () => {
+  try {
+    // 替换为你真实的仓库地址
+    await open('https://github.com/Aurora0201/nikon-framer');
+  } catch (error) {
+    console.error('Failed to open URL:', error);
+  }
+};
 
 const startResize = () => {
   isDragging.value = true;
@@ -47,22 +58,42 @@ const stopResize = () => {
   <div class="workspace-panel-container">
     
     <div class="workspace-header">
-      <span 
-        class="tab" 
-        :class="{ active: currentTab === 'preview' }"
-        @click="currentTab = 'preview'"
-      >
-        👁️ 实时预览
-      </span>
-      <span 
-        class="tab" 
-        :class="{ active: currentTab === 'settings' }"
-        @click="currentTab = 'settings'"
-      >
-        ⚙️ 导出设置
-      </span>
+      <div class="tabs-container">
+        <span 
+          class="tab" 
+          :class="{ active: currentTab === 'preview' }"
+          @click="currentTab = 'preview'"
+        >
+          👁️ 实时预览
+        </span>
+        <span 
+          class="tab" 
+          :class="{ active: currentTab === 'settings' }"
+          @click="currentTab = 'settings'"
+        >
+          ⚙️ 导出设置
+        </span>
+      </div>
       
-      <button class="reset-btn" @click="handleReset" title="重置视图">↺</button>
+      <div class="header-actions">
+        <a 
+          href="javascript:void(0)" 
+          @click.prevent="openGithub"
+          class="icon-btn github" 
+          title="View on GitHub"
+        >
+          <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor" style="display: block;">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path>
+          </svg>
+        </a>
+
+        <button class="icon-btn reset" @click="handleReset" title="重置视图">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <path d="M3 3v5h5"></path>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <div class="workspace-body">
@@ -101,22 +132,34 @@ const stopResize = () => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  height: 100vh; /* 强制撑满 */
+  height: 100vh;
   overflow: hidden;
   position: relative;
   background: #1a1a1a;
 }
 
+/* 🟢 修改重点：点阵背景 + 暗角效果 */
 .workspace-body {
-  /* 🟢 [核心修复] 加上 display: flex，打通父子高度传递 */
   display: flex;
   flex-direction: column;
-  
   flex: 1;
   min-height: 0;
   position: relative;
-  background: #151515;
   overflow: hidden;
+
+  /* 基础背景色 */
+  background-color: #151515;
+
+  /* 1. 绘制点阵 */
+  /* radial-gradient 创建圆形点：#2a2a2a 是点的颜色(比背景稍亮), transparent 是间隙 */
+  background-image: radial-gradient(#2a2a2a 1px, transparent 1px);
+  
+  /* 2. 控制点阵间距 */
+  background-size: 20px 20px; /* 这里的数值越小，点越密集 */
+
+  /* 3. 添加暗角 (Vignette) */
+  /* inset 表示内阴影，让四周变暗，突出中间的预览图 */
+  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.6);
 }
 
 .workspace-header {
@@ -124,16 +167,69 @@ const stopResize = () => {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  padding: 0 10px;
+  justify-content: space-between;
+  padding: 0 16px;
   background: #151515;
   border-bottom: 1px solid #333;
+  position: relative;
+  z-index: 100; /* 确保层级高于 resizer */
+}
+
+.tabs-container {
+  display: flex;
   gap: 10px;
 }
 
-.reset-btn { margin-left: auto; background: transparent; border: none; color: #888; cursor: pointer; font-size: 1.2em; }
-.reset-btn:hover { color: #fff; }
-.tab { padding: 4px 12px; font-size: 0.85em; color: #888; cursor: pointer; }
-.tab.active { color: #fff; background: #333; border-radius: 4px; }
+.tab { 
+  padding: 4px 12px; 
+  font-size: 0.85em; 
+  color: #888; 
+  cursor: pointer; 
+  transition: color 0.2s;
+  user-select: none;
+}
+.tab:hover { color: #ccc; }
+.tab.active { 
+  color: #fff; 
+  background: #333; 
+  border-radius: 4px; 
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  line-height: 0;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #eee;
+}
+
+/* GitHub 按钮特有样式 */
+.icon-btn.github:hover {
+  color: #fff; 
+}
+
+/* Reset 按钮特有样式 */
+.icon-btn.reset:hover {
+  color: #646cff;
+  transform: rotate(-30deg);
+}
 
 .resize-handle {
   height: 10px;

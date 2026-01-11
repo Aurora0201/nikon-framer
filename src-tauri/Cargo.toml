@@ -39,3 +39,4 @@ rayon = "1.10" # 请使用最新版本
 log = "0.4"
 tauri-plugin-log = "2.0" # 确保版本与你的 tauri 版本兼容
 thiserror = "1.0"
+tauri-plugin-shell = "2.3.4"

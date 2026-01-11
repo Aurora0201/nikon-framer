@@ -11,6 +11,7 @@
     "dialog:allow-open",
     "dialog:allow-message",
     "core:event:default",
-    "dialog:allow-confirm"
+    "dialog:allow-confirm",
+    "shell:allow-open"
   ]
 }
