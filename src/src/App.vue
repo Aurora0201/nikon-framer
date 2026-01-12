@@ -100,13 +100,13 @@ useGlobalEvents();
   
   display: grid;
   grid-template-columns: 280px 220px minmax(0, 1fr);
-  gap: 1px; /* 微调间距 */
+  /* gap: 1px; 微调间距 */
   
   background-color: #000;
   border: 1px solid var(--border-color);
   
   /* 这个圆角是内部面板的圆角，可以稍微小一点，或者也用 var(--app-radius) */
-  border-radius: 6px; 
+  border-radius: var(--app-radius); 
   overflow: hidden;
 }
 

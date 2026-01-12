@@ -211,7 +211,7 @@ const clearAll = () => store.clearQueue();
   overflow: hidden;   /* 关键：防止内部元素溢出 */
   display: flex;      /* 让内部的 file-list 自动撑开 */
   border: 1px solid #222; /* 边框移到这里，列表看起来更整体 */
-  border-radius: 4px;
+  border-radius: 8px;
 }
 .list-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .clear-btn { background: none; border: none; color: #555; font-size: 0.75em; cursor: pointer; padding: 0; }
