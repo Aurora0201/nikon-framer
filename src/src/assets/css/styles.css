@@ -4,15 +4,13 @@
 
 @font-face {
   font-family: 'Inter Display';
-  /* 尝试往上找，直到找到 src-tauri */
-  /* 注意：根据你的 main.css 位置调整 ../ 的数量 */
+  /* 确保你的 vite.config.js 中配置了 alias '@fonts'，或者使用相对路径 */
   src: url('@fonts/InterDisplay-Medium.otf') format('opentype');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
 
-/* 同样配置 Bold */
 @font-face {
   font-family: 'Inter Display';
   src: url('@fonts/InterDisplay-Bold.otf') format('opentype');
@@ -22,11 +20,17 @@
 }
 
 :root {
+  /* --- 🟢 核心设计变量 (Design Tokens) --- */
+  --app-radius: 16px;       /* 全局统一圆角：窗口 & 状态栏 */
+  
   /* --- 品牌色与主题色 (Nikon Theme) --- */
   --nikon-yellow: #ffe100;
-  --bg-color: #121212;      /* 全局背景加深 */
-  --panel-bg: #1a1a1a;      /* 面板背景 */
-  --input-bg: #2c2c2c;      /* 输入框背景 */
+  
+  /* 注意：--bg-color 主要用于组件内部，而不是 Body */
+  --bg-color: #121212;      
+  --panel-bg: #1a1a1a;      
+  --input-bg: #2c2c2c;      
+  
   --text-main: #e0e0e0;
   --text-sub: #aaaaaa;
   --border-color: #333333;
@@ -40,7 +44,7 @@
   --progress-green: #4caf50;
 
   /* --- 字体设置 --- */
-  font-family: "Inter", "Noto Sans SC", "Segoe UI", Helvetica, Arial, sans-serif;
+  font-family: "Inter Display", "Inter", "Noto Sans SC", "Segoe UI", Helvetica, Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   font-weight: 400;
@@ -48,8 +52,7 @@
   /* 强制深色模式 */
   color-scheme: dark;
   color: var(--text-main);
-  background-color: var(--bg-color);
-
+  
   /* 渲染优化 */
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -57,14 +60,21 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* 🟢 核心重置：撑满窗口，移除默认边距 */
+/* 🟢 核心修改：背景透明化 */
+/* 必须设置为 transparent，否则圆角外部会有黑色背景块，无法透出桌面 */
 html, body, #app {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
-  overflow: hidden; /* 禁止原生滚动条，由内部面板接管 */
-  display: block;   /* 移除 flex 居中 */
+  overflow: hidden; /* 禁止原生滚动条 */
+  display: block;
+  
+  /* 关键：让 Tauri 窗口完全透明 */
+  /* 🟢 修复方案：强制背景完全透明 */
+  /* 使用 rgba(0,0,0,0) 比 transparent 兼容性有时更好，!important 确保不被浏览器默认样式覆盖 */
+  background-color: rgba(0, 0, 0, 0) !important; 
+  background: transparent !important;
 }
 
 * { box-sizing: border-box; }
@@ -75,10 +85,15 @@ img {
   user-select: none;
 }
 
-/* 自定义滚动条 (适用于所有 overflow 容器) */
+/* 🟢 选中文字颜色适配 (细节加分项) */
+::selection {
+  background-color: rgba(255, 225, 0, 0.3); /* 尼康黄半透明 */
+  color: #fff;
+}
+
+/* 自定义滚动条 (保持原样，也可以稍微调细一点适配精致感) */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #555; }
+::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #666; }
 ::-webkit-scrollbar-corner { background: transparent; }
-
