@@ -282,7 +282,9 @@ const clearAll = () => store.clearQueue();
 /* 🟢 修改：序号样式微调 */
 /* 放在文件名旁边时，建议稍微做小一点，像个小标签 */
 .file-index {
+  font-family: inherit;
   font-size: 0.8em; 
+  font-weight: 700;
   color: #666;       /* 平时颜色淡一点 */
   background: #2a2a2a; 
   width: 16px;       /* 稍微改小 */
@@ -290,7 +292,6 @@ const clearAll = () => store.clearQueue();
   border-radius: 4px; /* 改成圆角矩形看起来更像标签，或者保持 50% 圆形也可以 */
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  font-family: monospace;
   line-height: 1;
 }
 
@@ -341,7 +342,7 @@ const clearAll = () => store.clearQueue();
 .name-row {
   display: flex;
   align-items: center;
-  gap: 1px; /* 序号和文件名之间的间距 */
+  gap: 10px; /* 序号和文件名之间的间距 */
   width: 100%;
 }
 </style>
