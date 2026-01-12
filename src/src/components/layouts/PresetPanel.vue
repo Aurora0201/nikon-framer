@@ -59,13 +59,13 @@ const handleImgError = (e) => {
 /* 样式保持不变 */
 .panel-header {
   height: 40px; display: flex; align-items: center; padding: 0 16px;
-  background: #1a1a1a; border-bottom: 1px solid #333;
+  background: transparent; border-bottom: 1px solid #333;
   font-weight: 600; font-size: 0.9em; color: #ccc; flex-shrink: 0; 
 }
-.panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+.panel-body { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; background-color: transparent;}
 .skeleton-list, .preset-list { display: flex; flex-direction: column; gap: 12px; }
 .preset-card {
-  background-color: #222; border: 1px solid #333; border-radius: 6px;
+  background-color: #222; border: 1px solid #333; border-radius: 8px;
   overflow: hidden; cursor: pointer; transition: all 0.2s ease;
   position: relative; flex-shrink: 0; 
 }

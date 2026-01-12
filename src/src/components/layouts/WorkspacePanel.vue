@@ -135,7 +135,7 @@ const stopResize = () => {
   height: 100vh;
   overflow: hidden;
   position: relative;
-  background: #1a1a1a;
+  background: transparent;
 }
 
 /* 🟢 修改重点：点阵背景 + 暗角效果 */
@@ -169,7 +169,7 @@ const stopResize = () => {
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  background: #151515;
+  background: transparent;
   border-bottom: 1px solid #333;
   position: relative;
   z-index: 100; /* 确保层级高于 resizer */
@@ -192,7 +192,7 @@ const stopResize = () => {
 .tab.active { 
   color: #fff; 
   background: #333; 
-  border-radius: 4px; 
+  border-radius: 6px; 
 }
 
 .header-actions {

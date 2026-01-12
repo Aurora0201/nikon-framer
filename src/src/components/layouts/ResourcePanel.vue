@@ -137,8 +137,13 @@ const clearAll = () => store.clearQueue();
 <style scoped>
 /* 面板头部 */
 .panel-header {
-  height: 40px; display: flex; align-items: center; justify-content: space-between;
-  padding: 0 12px; background: #1a1a1a; border-bottom: 1px solid #333;
+  height: 40px; 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between;
+  padding: 0 12px; 
+  background: transparent; 
+  border-bottom: 1px solid #333;
   font-weight: 600; font-size: 0.9em; color: #ccc; flex-shrink: 0;
 }
 .header-actions { display: flex; gap: 8px; }
@@ -173,7 +178,7 @@ const clearAll = () => store.clearQueue();
   color: #fff;
   border: 1px solid #444;
   padding: 8px 10px;
-  border-radius: 4px;
+  border-radius: 8px;
   outline: none;
   font-size: 0.9em;
   cursor: pointer;
