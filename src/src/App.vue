@@ -105,7 +105,7 @@ useGlobalEvents();
   grid-template-columns: 280px 220px minmax(0, 1fr);
   
   /* --- A. 玻璃材质 --- */
-  background: rgba(20, 20, 20, 0.25);
+  background: rgba(0, 0, 0, 0.2);
   
   /* 保持强力磨砂 */
   backdrop-filter: blur(24px) saturate(120%);
@@ -166,21 +166,21 @@ useGlobalEvents();
 .col-1 { 
   background-color: transparent; 
   /* 右侧分割线：用半透明线替代 */
-  border-right: 1px solid rgba(255, 255, 255, 0.05); 
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05); 
+  border-right: 1px solid rgba(255, 255, 255, 0.10); 
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10); 
 }
 
 .col-2 { 
   background-color: transparent; 
   /* 如果觉得中间栏需要稍微深一点以区分，可以用极低透明度的黑 */
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05); 
-  border-right: 1px solid rgba(255, 255, 255, 0.05); 
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10); 
+  border-right: 1px solid rgba(255, 255, 255, 0.10); 
 }
 
 .col-3 { 
   background-color: transparent; 
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  border-right: 1px solid rgba(255, 255, 255, 0.05);  
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  border-right: 1px solid rgba(255, 255, 255, 0.10);  
 }
 
 /* 🟢 5. 底部栏容器 (保持透明占位) */

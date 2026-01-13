@@ -135,219 +135,207 @@ const clearAll = () => store.clearQueue();
 </template>
 
 <style scoped>
-/* 面板头部 */
+/* =========================================
+   1. 面板头部 (Header)
+   ========================================= */
 .panel-header {
   height: 40px; 
-  display: flex; 
-  align-items: center; 
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   padding: 0 12px; 
   background: transparent; 
-  border-bottom: 1px solid #333;
-  font-weight: 600; font-size: 0.9em; color: #ccc; flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-weight: 600; font-size: 0.9em; 
+  color: rgba(255, 255, 255, 0.85); 
+  flex-shrink: 0;
 }
-.header-actions { display: flex; gap: 8px; }
-.icon-btn-mini {
-  background: #333; border: 1px solid #444; color: #fff; width: 26px; height: 26px;
-  border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px;
-}
-.icon-btn-mini:hover { background: #444; border-color: #666; }
 
-/* 主体区域 */
-/* 1. 找到 .panel-body，禁止它滚动 */
-.panel-body {
-  flex: 1; 
-  padding: 12px; 
-  /* overflow-y: auto;  <-- ❌ 删掉这行 (这是罪魁祸首) */
-  overflow: hidden;  /* <-- ✅ 改成这行 (锁死父容器) */
-  
-  display: flex; 
-  flex-direction: column; 
-  gap: 20px;
+.header-actions { display: flex; gap: 8px; }
+
+.icon-btn-mini {
+  background: rgba(255, 255, 255, 0.05); 
+  border: 1px solid rgba(255, 255, 255, 0.1); 
+  color: rgba(255, 255, 255, 0.7); 
+  width: 26px; height: 26px;
+  border-radius: 6px; cursor: pointer; 
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+  transition: all 0.2s;
 }
+.icon-btn-mini:hover { 
+  background: rgba(255, 255, 255, 0.15); 
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+/* =========================================
+   2. 主体区域 (Body)
+   ========================================= */
+.panel-body {
+  flex: 1; padding: 12px; overflow: hidden; 
+  display: flex; flex-direction: column; gap: 20px;
+}
+
 .section { display: flex; flex-direction: column; }
 .section-title {
-  display: block; font-size: 0.75em; color: #666; margin-bottom: 6px; 
+  display: block; font-size: 0.75em; 
+  color: rgba(255, 255, 255, 0.5); 
+  margin-bottom: 8px; 
   text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;
 }
 
-/* 🟢 [修复 2] 下拉选框美化 */
+/* =========================================
+   3. 下拉选框 (Select) - 调亮，不再死黑
+   ========================================= */
 .mode-select {
   width: 100%;
-  background-color: #222;
-  color: #fff;
-  border: 1px solid #444;
-  padding: 8px 10px;
-  border-radius: 8px;
-  outline: none;
-  font-size: 0.9em;
-  cursor: pointer;
   
-  /* 关键：去除默认外观，使用 SVG 自定义箭头 */
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
+  /* 🟢 修改：不再用 0.6 的黑，改用 lighter 的深空灰，更融合 */
+  background-color: rgba(30, 30, 35, 0.4); 
+  color: rgba(255, 255, 255, 0.95);
   
-  /* SVG 箭头图标 (白色) */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  
+  padding: 8px 10px; border-radius: 6px; outline: none; font-size: 0.9em; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  
   background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px;
-  padding-right: 35px; /* 给箭头留出空间 */
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 16px; padding-right: 35px;
   
-  transition: border-color 0.2s;
+  transition: all 0.2s;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.2); 
 }
-.mode-select:focus { border-color: #666; }
-.mode-select:hover { border-color: #555; }
+.mode-select:focus { 
+  border-color: rgba(255, 255, 255, 0.3); 
+  background-color: rgba(30, 30, 35, 0.6); 
+}
+.mode-select:hover { border-color: rgba(255, 255, 255, 0.2); background-color: rgba(255, 255, 255, 0.1); }
+.mode-select option { background-color: #252528; color: #eee; }
 
-/* 列表区域 */
-/* 1. 列表区域容器调整 */
-.file-list-section { 
-  flex: 1; 
-  min-height: 0; 
-  display: flex; 
-  flex-direction: column; 
-}
+/* =========================================
+   4. 列表视口 (Viewport) - 调亮底色
+   ========================================= */
+.file-list-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
-/* 🟢 [新增] 视口容器 */
-.list-viewport {
-  flex: 1;
-  position: relative; /* 关键：作为绝对定位的锚点 */
-  overflow: hidden;   /* 关键：防止内部元素溢出 */
-  display: flex;      /* 让内部的 file-list 自动撑开 */
-  border: 1px solid #222; /* 边框移到这里，列表看起来更整体 */
-  border-radius: 8px;
-}
 .list-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.clear-btn { background: none; border: none; color: #555; font-size: 0.75em; cursor: pointer; padding: 0; }
+.clear-btn { background: none; border: none; color: rgba(255, 255, 255, 0.4); font-size: 0.75em; cursor: pointer; padding: 0; }
 .clear-btn:hover { color: #d44; text-decoration: underline; }
 
-/* 2. 列表本身 (只负责滚动) */
-.file-list {
-  flex: 1;
-  overflow-y: auto;   /* 滚动条在这里 */
-  width: 100%;        /* 填满视口 */
-  display: flex; 
-  flex-direction: column;
-  /* border: ... 移除了这里的边框，由 viewport 接管 */
+.list-viewport {
+  flex: 1; position: relative; overflow: hidden; display: flex;
+  
+  /* 🟢 修改：从 0.5 降到 0.25，去除“黑洞感” */
+  background: rgba(0, 0, 0, 0.25); 
+  
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  /* 仅保留微弱的内阴影 */
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+  
+  border-radius: 6px;
 }
-/* --- 修改部分：调整高度以适应图片 --- */
+
+.file-list { flex: 1; overflow-y: auto; width: 100%; display: flex; flex-direction: column; }
+
+/* =========================================
+   5. 列表项 (File Item) - 核心修改
+   ========================================= */
 .file-item {
-  /* 🟢 修改：增加高度，从原来的默认值改为 60px，给图片留空间 */
-  padding: 8px 10px; 
-  height: 60px; 
-  border-bottom: 1px solid #2a2a2a;
+  padding: 8px 10px; height: 64px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   display: flex; align-items: center; justify-content: space-between;
   transition: background 0.2s;
+  position: relative; /* 为伪元素定位 */
 }
-.file-item:hover { background: #252525; }
+
+/* 悬停：微弱的白光 */
+.file-item:hover { background: rgba(255, 255, 255, 0.03); }
+
+/* 🟢 选中状态：流光渐变 (The Golden Glow) */
 .file-item.active {
-  background: #2c2c2c;
+  /* 不再是实心色块，而是从左侧黄色发出的渐变光 */
+  background: linear-gradient(90deg, rgba(255, 215, 0, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
+  
+  /* 左侧指示条保持 */
   border-left: 3px solid var(--nikon-yellow);
   padding-left: 7px;
-}
-
-/* 🟢 [新增] 独立的遮罩层样式 */
-.drag-overlay {
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0; /* 铺满整个视口 */
-  z-index: 99; /* 保证在最上层 */
   
-  background-color: rgba(26, 26, 26, 0.85); /* 深色半透明背景 */
-  border: 2px dashed var(--nikon-yellow); /* 黄色虚线框 */
-  backdrop-filter: blur(2px); /* 可选：一点磨砂效果 */
-  
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none; /* 关键：让鼠标事件穿透 (虽然 drop 实际上是在 document 监听，但加上这个是好习惯) */
+  /* 上下加一条极细的高光线，增加精致感 */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.overlay-content {
-  color: var(--nikon-yellow);
-  font-weight: bold;
-  font-size: 1.1em;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
+.item-left { display: flex; align-items: center; overflow: hidden; gap: 12px; flex: 1; }
 
-/* --- 修改部分：增加左侧间距 --- */
-.item-left { 
-  display: flex; 
-  align-items: center; 
-  overflow: hidden; 
-  gap: 10px; /* 🟢 保持适当间距 */
-  flex: 1; 
-}
-
-/* 🟢 修改：序号样式微调 */
-/* 放在文件名旁边时，建议稍微做小一点，像个小标签 */
-.file-index {
-  font-family: inherit;
-  font-size: 0.8em; 
-  font-weight: 700;
-  color: #666;       /* 平时颜色淡一点 */
-  background: #2a2a2a; 
-  width: 16px;       /* 稍微改小 */
-  height: 16px;
-  border-radius: 4px; /* 改成圆角矩形看起来更像标签，或者保持 50% 圆形也可以 */
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  line-height: 1;
-}
-
-/* --- 🟢 新增部分：略缩图样式微调 --- */
-.list-thumb {
-  margin-right: 2px; /* 图片和文字之间再加一点点呼吸感 */
-  flex-shrink: 0;    /* 防止被挤扁 */
-}
-.file-item.active .file-index { color: var(--nikon-yellow); background: rgba(255,225,0,0.1); }
-
-
-/* --- 修改部分：文件名样式微调 --- */
-.file-name {
-  font-size: 0.9em;
-  font-weight: 500;
-  color: #ddd;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  line-height: 1.2; /* 🟢 紧凑行高 */
-}
-.file-item.active .file-name { color: #fff; font-weight: 600; }
-
-/* --- 修改部分：徽章样式微调 --- */
-.exif-badge {
-  font-size: 8px; /* 🟢 改小字体 */
-  padding: 1px 4px; 
+.list-thumb { 
+  margin-right: 0; flex-shrink: 0; 
   border-radius: 2px;
-  background: #333; 
-  color: #666; 
-  width: fit-content; /* 只包裹文字宽度 */
-  font-weight: bold;
-  letter-spacing: 0.5px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  opacity: 0.9;
 }
-.exif-badge.ok { background: rgba(102, 187, 106, 0.15); color: #66bb6a; }
-.exif-badge.no { background: rgba(183, 28, 28, 0.2); color: #ef5350; }
-.exif-badge.scanning { color: var(--nikon-yellow); }
+
+/* 序号标签 - 玻璃化 */
+.file-index {
+  font-family: inherit; font-size: 0.7em; font-weight: 700;
+  
+  /* 🟢 修改：未选中时是半透明玻璃 */
+  color: rgba(255, 255, 255, 0.5); 
+  background: rgba(255, 255, 255, 0.1); 
+  
+  width: 18px; height: 18px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1;
+}
+
+/* 选中时：实心黄，文字变黑 */
+.file-item.active .file-index { 
+  background: var(--nikon-yellow); 
+  color: #111; 
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.4); /* 序号发光 */
+}
+
+.name-col { display: flex; flex-direction: column; gap: 4px; overflow: hidden; justify-content: center; }
+.name-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+
+.file-name {
+  font-size: 0.9em; font-weight: 500;
+  color: rgba(255, 255, 255, 0.75); 
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;
+}
+/* 选中文字高亮 */
+.file-item.active .file-name { color: #fff; text-shadow: 0 0 5px rgba(0,0,0,0.5); font-weight: 600; }
+
+/* EXIF 徽章 - 保持鲜艳 */
+.exif-badge {
+  font-size: 9px; padding: 1px 5px; border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1); 
+  color: rgba(255, 255, 255, 0.6); 
+  width: fit-content; font-weight: 600; letter-spacing: 0.3px;
+}
+.exif-badge.ok { 
+  background: rgba(102, 187, 106, 0.2); 
+  color: #28a52e; 
+}
+.exif-badge.no { 
+  background: rgba(229, 115, 115, 0.2); 
+  color: #e64f4f; 
+}
+.exif-badge.scanning { color: var(--nikon-yellow); background: rgba(255, 215, 0, 0.1); }
+
+.del-btn {
+  background: none; border: none; color: rgba(255, 255, 255, 0.3); 
+  cursor: pointer; font-size: 1.4em; line-height: 1; padding: 0 5px; margin-left: 5px;
+  transition: color 0.2s;
+}
+.del-btn:hover { color: #ff5252; }
 
 .empty-tip {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center; color: #444; font-size: 0.85em; min-height: 150px; user-select: none;
+  text-align: center; color: rgba(255, 255, 255, 0.25); 
+  font-size: 0.85em; min-height: 150px; user-select: none;
 }
-.del-btn {
-  background: none; border: none; color: #444; cursor: pointer;
-  font-size: 1.4em; line-height: 1; padding: 0 5px; margin-left: 5px;
-}
-.del-btn:hover { color: #d44; }
 
-/* 🟢 新增：第一行的横向布局 */
-.name-row {
-  display: flex;
-  align-items: center;
-  gap: 10px; /* 序号和文件名之间的间距 */
-  width: 100%;
+.drag-overlay {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;
+  background-color: rgba(20, 20, 20, 0.85); 
+  border: 2px dashed var(--nikon-yellow); 
+  backdrop-filter: blur(4px); 
+  display: flex; align-items: center; justify-content: center; pointer-events: none;
 }
+.overlay-content { color: var(--nikon-yellow); font-weight: bold; font-size: 1.1em; display: flex; flex-direction: column; align-items: center; gap: 10px; text-transform: uppercase; letter-spacing: 1px; }
 </style>

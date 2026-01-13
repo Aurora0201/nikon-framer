@@ -20,40 +20,39 @@
 }
 
 :root {
-  /* --- 🟢 核心设计变量 (Design Tokens) --- */
-  --app-radius: 16px;       /* 全局统一圆角：窗口 & 状态栏 */
+  /* --- 🟢 核心设计变量 --- */
+  --app-radius: 16px;
   
-  /* --- 品牌色与主题色 (Nikon Theme) --- */
+  /* --- 品牌色 (保持不变) --- */
   --nikon-yellow: #ffe100;
   
-  /* 注意：--bg-color 主要用于组件内部，而不是 Body */
-  --bg-color: #121212;      
-  --panel-bg: #1a1a1a;      
-  --input-bg: #2c2c2c;      
+  /* --- 🟢 新色系：现代深空灰 (Lighter & Premium) --- */
+  /* 不再是纯黑，而是带有高级质感的深炭灰 */
+  --bg-color: #1E1E20;       /* App 整体背景 (原来的 #121212) */
+  --panel-bg: #252528;       /* 面板默认背景 (原来的 #1a1a1a) */
+  --input-bg: #2E2E32;       /* 输入框/列表项背景 (原来的 #2c2c2c) */
   
-  --text-main: #e0e0e0;
-  --text-sub: #aaaaaa;
-  --border-color: #333333;
-  --border-focus: #555555;
+  --text-main: #ECECEC;      /* 主文字更白一点，增加对比度 */
+  --text-sub: #A0A0A5;       /* 副文字带一点冷色调 */
+  
+  --border-color: #38383E;   /* 边框稍微亮一点，更精致 */
+  --border-focus: #55555A;
 
-  /* --- 状态颜色 --- */
-  --status-ok-bg: rgba(102, 187, 106, 0.15);
-  --status-ok-text: #66bb6a;
-  --status-no-bg: rgba(183, 28, 28, 0.4);
-  --status-no-text: #ffcdd2;
-  --progress-green: #4caf50;
+  /* --- 状态颜色 (微调以适应新背景) --- */
+  --status-ok-bg: rgba(102, 187, 106, 0.2);
+  --status-ok-text: #81c784;
+  --status-no-bg: rgba(229, 115, 115, 0.2);
+  --status-no-text: #e57373;
+  --progress-green: #66bb6a;
 
-  /* --- 字体设置 --- */
+  /* --- 字体设置 (保持不变) --- */
   font-family: "Inter Display", "Inter", "Noto Sans SC", "Segoe UI", Helvetica, Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   font-weight: 400;
 
-  /* 强制深色模式 */
   color-scheme: dark;
   color: var(--text-main);
-  
-  /* 渲染优化 */
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
