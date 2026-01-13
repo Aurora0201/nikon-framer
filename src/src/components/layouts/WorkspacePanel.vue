@@ -259,7 +259,7 @@ const stopResize = () => {
 
 .workspace-footer-wrapper {
   flex-shrink: 0;
-  background: #1a1a1a;
+  background: transparent;
   overflow: hidden;
 }
 </style>

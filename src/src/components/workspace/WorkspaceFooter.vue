@@ -41,7 +41,7 @@ const activePanelComponent = computed(() => {
   height: 100%;          /* 关键：继承 WorkspacePanel 传来的 height */
   display: flex;         /* 启用 Flex 布局 */
   flex-direction: column;/* 垂直排列 */
-  background: #1a1a1a;   /* 基础背景色，防止透明穿透 */
+  background: transparent;   /* 基础背景色，防止透明穿透 */
   overflow: hidden;      /* 防止整体溢出 */
   box-sizing: border-box;
 }
@@ -63,6 +63,8 @@ const activePanelComponent = computed(() => {
   
   padding: 15px 20px;    /* 内部间距 */
   position: relative;
+  /* background-color: transparent; */
+  border-radius: var(--app-radius);
 }
 
 /* =========================================

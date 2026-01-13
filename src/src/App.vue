@@ -62,6 +62,7 @@ useGlobalEvents();
   /* 关键：从 style.css 读取背景色 */
   /* 因为 html/body 是透明的，这里必须上色，否则窗口是透明的 */
   background-color: var(--bg-color); 
+  /* background-color: #fff;  */
   color: var(--text-main);
   
   display: flex;
@@ -76,10 +77,9 @@ useGlobalEvents();
   overflow: hidden;
   
   /* 可选：加一个极细的边框，增强窗口在深色壁纸上的轮廓感 */
-  /* border: 1px solid rgba(255, 255, 255, 0.08); */
+  border: 1px solid rgba(255, 255, 255, 0.08);
   /* box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);  */
   
-  border: 1px solid rgba(255, 255, 255, 0.05); 
 }
 
 /* 🟢 2. 内容布局层 */
@@ -173,7 +173,6 @@ useGlobalEvents();
 .col-2 { 
   background-color: transparent; 
   /* 如果觉得中间栏需要稍微深一点以区分，可以用极低透明度的黑 */
-  background: rgba(0, 0, 0, 0.15); 
   border-bottom: 1px solid rgba(255, 255, 255, 0.05); 
   border-right: 1px solid rgba(255, 255, 255, 0.05); 
 }

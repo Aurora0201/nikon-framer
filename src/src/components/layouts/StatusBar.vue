@@ -104,6 +104,7 @@ const {
   justify-content: space-between;
   align-items: center;
   padding: 0 20px;
+  padding-right: 10px;
 }
 
 /* =========================================
@@ -115,7 +116,7 @@ const {
   text-shadow: 0 1px 2px rgba(0,0,0,0.9);
 }
 .indicator-wrapper { position: relative; width: 8px; height: 8px; display: flex; align-items: center; justify-content: center; }
-.indicator { width: 6px; height: 6px; border-radius: 50%; background-color: #555; transition: all 0.3s; z-index: 2; box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+.indicator { width: 8px; height: 8px; border-radius: 50%; background-color: #555; transition: all 0.3s; z-index: 2; box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
 .indicator-glow { position: absolute; width: 100%; height: 100%; border-radius: 50%; opacity: 0; transition: all 0.3s; z-index: 1; filter: blur(2px); }
 
 .indicator.normal { background-color: rgba(255, 255, 255, 0.3); }

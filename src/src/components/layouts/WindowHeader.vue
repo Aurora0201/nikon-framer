@@ -63,7 +63,7 @@ onUnmounted(() => {
 <style scoped>
 .window-title-bar {
   height: 38px; /* macOS 标题栏通常稍微高一点点 */
-  background-color: #121212; /* 或者 #181818 */
+  background-color: transparent; /* 或者 #181818 */
   display: flex;
   justify-content: space-between;
   align-items: center;
