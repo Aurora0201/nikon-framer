@@ -69,7 +69,7 @@ const {
 
 <style scoped>
 /* =========================================
-   1. 容器样式 (保持玻璃质感)
+   1. 容器样式 (简化版)
    ========================================= */
 .status-lens-container {
   width: 100%;
@@ -77,22 +77,22 @@ const {
   position: relative;
   border-radius: var(--app-radius);
   
-  background: rgba(255, 255, 255, 0.015);
-  backdrop-filter: blur(16px) saturate(120%);
-  -webkit-backdrop-filter: blur(16px) saturate(120%);
+  background: var(--glass-bg, rgba(255, 255, 255, 0.015));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   
-  box-shadow: 
-    0 0 0 1px rgba(0, 0, 0, 0.6),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.35),
-    inset 0 -1px 0 0 rgba(0, 0, 0, 0.5),
-    inset 0 0 20px rgba(255, 255, 255, 0.02),
-    0 12px 30px -8px rgba(0, 0, 0, 0.7);
+  /* 统一边框风格 */
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
 
-  border: none;
   user-select: none;
   overflow: hidden;
   z-index: 10;
+}
+
+/* Light Mode Override for Container */
+:global([data-theme='light']) .status-lens-container {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(0, 0, 0, 0.1);
 }
 
 .status-content {
@@ -139,20 +139,51 @@ const {
   flex: 1; height: 6px; background: rgba(0, 0, 0, 0.5); border-radius: 3px; overflow: hidden;
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.05); position: relative;
 }
+:global([data-theme='light']) .progress-track {
+  background: rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+}
+
 .progress-fill {
-  height: 100%; width: 0%; background: linear-gradient(90deg, #d4bb00, var(--nikon-yellow));
+  height: 100%; width: 0%; 
+  background-color: var(--nikon-yellow);
+  /* Striped Gradient for Animation */
+  background-image: linear-gradient(
+    45deg, 
+    rgba(255, 255, 255, 0.25) 25%, 
+    transparent 25%, 
+    transparent 50%, 
+    rgba(255, 255, 255, 0.25) 50%, 
+    rgba(255, 255, 255, 0.25) 75%, 
+    transparent 75%, 
+    transparent
+  );
+  background-size: 20px 20px;
+  animation: progress-stripes 1s linear infinite;
+  
   transition: width 0.2s linear; position: relative; box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
 }
+
+@keyframes progress-stripes {
+  from { background-position: 0 0; }
+  to { background-position: 20px 0; }
+}
+
 .fill-highlight { position: absolute; top: 0; left: 0; right: 0; height: 1px; background: rgba(255,255,255,0.6); opacity: 0.5; }
 
 .progress-num {
   font-family: 'Inter Display', sans-serif; font-variant-numeric: tabular-nums; font-size: 0.85em;
-  color: rgba(255, 255, 255, 0.6); min-width: 120px; text-align: right; display: flex; justify-content: flex-end; gap: 4px;
+  color: var(--text-sub); min-width: 120px; text-align: right; display: flex; justify-content: flex-end; gap: 4px;
   text-shadow: 0 1px 2px rgba(0,0,0,0.8);
 }
+:global([data-theme='light']) .progress-num {
+  text-shadow: none;
+}
 .num-current { color: #fff; font-weight: 600; }
+:global([data-theme='light']) .num-current { color: var(--text-main); }
 .num-divider { opacity: 0.4; }
 .num-percent { color: var(--nikon-yellow); margin-left: 6px; font-weight: 600; }
+:global([data-theme='light']) .num-percent { color: #d4bb00; }
 
 /* =========================================
    4. 右侧按钮 (Buttons) - 修正版
@@ -168,10 +199,7 @@ const {
   min-width: 80px;
   display: flex; justify-content: center; align-items: center;
   font-size: 0.85em; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
-  
-  /* 🟢 修复：圆角调整为 6px (适配外层的 12px) */
   border-radius: 8px;
-  
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.25, 1, 0.5, 1);
   user-select: none;
@@ -180,71 +208,63 @@ const {
   box-shadow: 0 2px 5px rgba(0,0,0,0.3);
 }
 
-/* --- single-mode (对应之前的次要按钮样式) --- */
+/* --- single-mode (次要按钮) --- */
 .nikon-btn.single-mode {
   background: rgba(255, 255, 255, 0.05);
   color: rgba(255, 255, 255, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
 }
-.nikon-btn.single-mode:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  color: #4b3b00;
-  border-color: rgba(255, 255, 255, 0.15);
-  /* 🟢 修复：移除了 transform 位移 */
+:global([data-theme='light']) .nikon-btn.single-mode {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-main);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: none;
 }
 
-/* --- batch-mode (主按钮：透亮黄水晶) --- */
-/* --- batch-mode (主按钮：明亮通透的淡色水晶) --- */
-/* --- batch-mode (主按钮：纯净奶油金) --- */
-/* --- batch-mode (主按钮：鲜艳磨砂黄水晶) --- */
+.nikon-btn.single-mode:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+:global([data-theme='light']) .nikon-btn.single-mode:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.2);
+}
+
+/* --- batch-mode (主按钮) --- */
 .nikon-btn.batch-mode {
-  background: linear-gradient(180deg, #ffe100, #ffc400);
-  
-  /* 🟢 修改点：不再用纯黑 */
-  /* 使用 85% 透明度的黑，让它自然融合 */
-  color: rgba(0, 0, 0, 0.85); 
-  
+  /* 恢复明亮的黄色 */
+  background: var(--nikon-yellow);
+  color: #111; /* 黑字确保对比度 */
   border: none;
-  
-  /* 🟢 新增：雕刻质感 */
-  /* 底部加一条半透明白线，模拟凹陷的高光 */
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
-  
-  /* 现有的 Shadow 保持不变 */
-  box-shadow: 
-    inset 0 1px 0 rgba(255, 255, 255, 0.7),
-    inset 0 0 10px rgba(255, 255, 255, 0.2),
-    inset 0 -1px 0 rgba(180, 130, 0, 0.1),
-    0 2px 4px rgba(0, 0, 0, 0.3);
+  font-weight: 800;
+  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
+}
+:global([data-theme='light']) .nikon-btn.batch-mode {
+  /* 浅色模式下稍微深一点的黄，避免刺眼，但保持活力 */
+  background: #FFD600; 
+  box-shadow: 0 4px 10px rgba(255, 200, 0, 0.25);
 }
 
 .nikon-btn.batch-mode:hover:not(:disabled) {
-  filter: brightness(1.05);
-  /* 悬停时文字颜色稍微加深一点 */
-  color: rgba(0, 0, 0, 0.95);
-  box-shadow: 
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 4px 10px rgba(255, 200, 0, 0.3);
+  filter: brightness(1.1);
+  transform: translateY(-1px);
 }
 
 .nikon-btn.batch-mode:active:not(:disabled) {
-  background: #ffc400;
   transform: translateY(1px);
-  /* 按下时，文字凹陷感消失，变成普通的内阴影 */
-  text-shadow: none;
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
-  color: #000;
+  filter: brightness(0.95);
+  box-shadow: 0 2px 5px rgba(255, 215, 0, 0.2);
 }
 
-/* --- 禁用态 (覆盖所有模式) --- */
+/* --- 禁用态 --- */
 .nikon-btn:disabled, 
 .nikon-btn.processing-mode {
-  background: rgba(255, 255, 255, 0.02) !important;
-  color: rgba(255, 255, 255, 0.2) !important;
-  border: 1px solid rgba(255, 255, 255, 0.02) !important;
-  box-shadow: none !important;
+  opacity: 0.5;
   cursor: not-allowed;
+  filter: grayscale(0.8);
+  box-shadow: none !important;
+  transform: none !important;
 }
 
 /* --- 停止按钮 (高优先级覆盖) --- */
