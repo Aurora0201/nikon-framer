@@ -25,3 +25,5 @@ src-tauri/gen
 *.sw?
 abstract.py
 src_backup
+old_version_src
+GEMINI.md

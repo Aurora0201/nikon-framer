@@ -1,13 +1,12 @@
 // src-tauri/src/processor/traits.rs
 use image::DynamicImage;
+use crate::{error::AppError, parser::models::ParsedImageContext}; // 🟢 引入新结构
 
-// 🟢 加上 Send + Sync，让 trait object 可以在多线程间安全移动
 pub trait FrameProcessor: Send + Sync {
+    // 🟢 接口变了：不再接收 make/model/params 字符串，而是接收 ctx
     fn process(
         &self, 
         img: &DynamicImage, 
-        make: &str, 
-        model: &str, 
-        params: &str
-    ) -> Result<DynamicImage, String>;
+        ctx: &ParsedImageContext
+    ) -> Result<DynamicImage, AppError>;
 }

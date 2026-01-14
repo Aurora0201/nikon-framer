@@ -1,50 +1,168 @@
 /* =========================================
    1. 全局配置与变量 (:root & Base)
    ========================================= */
+
+@font-face {
+  font-family: 'Inter Display';
+  /* 确保你的 vite.config.js 中配置了 alias '@fonts'，或者使用相对路径 */
+  src: url('@fonts/InterDisplay-Medium.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter Display';
+  src: url('@fonts/InterDisplay-Bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
-  /* --- 品牌色与主题色 (Nikon Theme) --- */
-  --nikon-yellow: #ffe100;
-  --bg-color: #121212;      /* 全局背景加深 */
-  --panel-bg: #1a1a1a;      /* 面板背景 */
-  --input-bg: #2c2c2c;      /* 输入框背景 */
-  --text-main: #e0e0e0;
-  --text-sub: #aaaaaa;
-  --border-color: #333333;
+  /* --- 🟢 核心设计变量 --- */
+  --app-radius: 16px;
+  
+  /* --- 🟡 品牌色系 (Nikon Yellow) --- */
+  --nikon-yellow: #ffe100;         /* 经典尼康黄 */
+  --nikon-yellow-hover: #ffd000;   /* 悬停加深 */
+  --nikon-yellow-dim: rgba(255, 225, 0, 0.15); /* 微光/背景色 */
+  
+  /* --- 🌈 亮色系 (Bright Color System for Light Mode) --- */
+  --bright-blue: #007AFF;   /* iOS Blue */
+  --bright-green: #34C759;  /* Success Green */
+  --bright-orange: #FF9500; /* Warning Orange */
+
+  /* --- ⚫ 品牌黑/灰度色系 (Neutral Grays) --- */
+  --gray-900: #121212; 
+  --gray-850: #181818;
+  --gray-800: #1e1e1e;
+  --gray-700: #2a2a2a;
+  --gray-500: #555555;
+  --gray-400: #757575;
+  --gray-100: #f5f5f5;
+
+  /* --- 🟢 新色系：现代深空灰 (Lighter & Premium) --- */
+  /* 不再是纯黑，而是带有高级质感的深炭灰 */
+  --bg-color: #1E1E20;       /* App 整体背景 (原来的 #121212) */
+  --panel-bg: #252528;       /* 面板默认背景 (原来的 #1a1a1a) */
+  --input-bg: #2E2E32;       /* 输入框/列表项背景 (原来的 #2c2c2c) */
+  
+  --text-main: #ECECEC;      /* 主文字更白一点，增加对比度 */
+  --text-sub: #A0A0A5;       /* 副文字带一点冷色调 */
+  
+  --border-color: #505058;   /* 边框提亮，增强深色模式下的对比度 */
   --border-focus: #555555;
+  
+  /* --- 🟢 区域背景色 (Panel Backgrounds) --- */
+  /* 增大深浅差异，确保视觉区分明显 */
+  --bg-resource:  rgba(255, 255, 255, 0.03); /* 层级 1: 侧边栏微亮叠层 */
+  --bg-preset:    rgba(0, 0, 0, 0.12);       /* 层级 2: 中间层微暗 */
+  --bg-workspace: transparent;                /* 层级 3: 工作区透出底色 */
 
-  /* --- 状态颜色 --- */
-  --status-ok-bg: rgba(102, 187, 106, 0.15);
-  --status-ok-text: #66bb6a;
-  --status-no-bg: rgba(183, 28, 28, 0.4);
-  --status-no-text: #ffcdd2;
-  --progress-green: #4caf50;
+  /* --- 🟢 内部组件背景 (Inner Backgrounds) --- */
+  --inner-bg: rgba(0, 0, 0, 0.2); 
+  --card-bg:  rgba(255, 255, 255, 0.05); 
 
-  /* --- 字体设置 --- */
-  font-family: "Inter", "Noto Sans SC", "Segoe UI", Helvetica, Arial, sans-serif;
+  --panel-shadow: none;
+
+  --col-bg: transparent; 
+
+  /* --- 状态颜色 (微调以适应新背景) --- */
+  --status-ok-bg: rgba(102, 187, 106, 0.2);
+  --status-ok-text: #81c784;
+  --status-no-bg: rgba(229, 115, 115, 0.2);
+  --status-no-text: #e57373;
+  --progress-green: #66bb6a;
+
+  /* --- 字体设置 (保持不变) --- */
+  font-family: "Inter Display", "Inter", "Noto Sans SC", "Segoe UI", Helvetica, Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   font-weight: 400;
 
-  /* 强制深色模式 */
   color-scheme: dark;
   color: var(--text-main);
-  background-color: var(--bg-color);
-
-  /* 渲染优化 */
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* 🟢 核心重置：撑满窗口，移除默认边距 */
-html, body, #app {
+/* 🟢 Light Mode Overrides (浅色模式) */
+/* 使用 "Modern Clean" 分层色彩系统 */
+[data-theme='light'] {
+  /* ⚠️ 强制背景透明 */
+  background-color: transparent !important; 
+  border: none;
+  
+  /* --- 1. 基础层级 --- */
+  /* App 背景: 使用中性灰/System Gray，营造桌面感 */
+  --bg-color: #F5F5F7;       
+  
+  /* 面板背景: 纯白，作为主要内容的承载容器 */
+  --panel-bg: #FFFFFF;
+  
+  /* 侧边栏背景: 增加区分度，采用微弱的颜色区分 */
+  --bg-resource: #EDEEF3; 
+  --bg-preset:   #F5F6F9;
+  --bg-workspace: #FFFFFF;
+  
+  --inner-bg: rgba(0, 0, 0, 0.04);
+  --card-bg:  #FFFFFF;
+
+  /* --- 2. 交互元素 --- */
+  /* 输入框/列表/卡片背景: 浅灰，与白色面板形成层级反差 (Inset Look) */
+  --input-bg: #E3E3E8;
+  
+  /* --- 3. 边框与线条 --- */
+  /* ⚠️ 强化边框颜色，使其在浅色模式下清晰可见 */
+  --border-color: #C6C6CC;   
+  --border-focus: var(--bright-blue); 
+
+  /* 阴影质感 */
+  --panel-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+
+  /* --- 4. 文字排版 --- */
+  /* 主文字: 近似纯黑，确保极佳的可读性 */
+  --text-main: #1D1D1F;
+  /* 副文字: 中性灰，不偏色 */
+  --text-sub:  #86868B;
+  
+  /* --- 5. 品牌与状态 --- */
+  /* 尼康黄: 在白底上稍微加深一点点，保证可见性 */
+  --nikon-yellow: #F0C800; 
+  --nikon-yellow-hover: #DDB600;
+  /* 选中态: 非常淡的黄色背景 */
+  --nikon-yellow-dim: rgba(240, 200, 0, 0.12);
+
+  /* 状态色优化 */
+  --status-ok-bg: rgba(52, 199, 89, 0.12);
+  --status-ok-text: #008030; /* 更深一点的绿，提高对比度 */
+  --status-no-bg: rgba(255, 59, 48, 0.1);
+  --status-no-text: #D60000;
+  
+  --accent-secondary: var(--bright-blue);
+}
+
+
+/* 🟢 核心修改：背景透明化 */
+/* 必须设置为 transparent，否则圆角外部会有黑色背景块，无法透出桌面 */
+html, body {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
-  overflow: hidden; /* 禁止原生滚动条，由内部面板接管 */
-  display: block;   /* 移除 flex 居中 */
+  overflow: hidden; /* 禁止原生滚动条 */
+  background-color: transparent !important;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  /* 🟢 布局修正：通过 padding 给整个应用留出 2px 边距，避免 margin 导致的位移问题 */
+  padding: 2px;
+  background-color: transparent !important;
 }
 
 * { box-sizing: border-box; }
@@ -55,282 +173,15 @@ img {
   user-select: none;
 }
 
-/* 自定义滚动条 (适用于所有 overflow 容器) */
+/* 🟢 选中文字颜色适配 (细节加分项) */
+::selection {
+  background-color: rgba(255, 225, 0, 0.3); /* 尼康黄半透明 */
+  color: #fff;
+}
+
+/* 自定义滚动条 (保持原样，也可以稍微调细一点适配精致感) */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #555; }
+::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #666; }
 ::-webkit-scrollbar-corner { background: transparent; }
-
-/* =========================================
-   2. 基础元素样式 (Elements)
-   ========================================= */
-
-/* 输入框与 Select 统一 */
-select, input[type="text"], input[type="number"] {
-  width: 100%;
-  height: 36px; /*稍微改小一点，适应紧凑布局 */
-  padding: 0 10px;
-  background-color: var(--input-bg);
-  color: #fff;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  font-size: 0.9em;
-  font-family: inherit;
-  outline: none;
-  transition: all 0.2s ease;
-  appearance: none;
-}
-
-/* Select 自定义箭头 */
-select {
-  padding-right: 30px;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  background-size: 14px;
-}
-
-select:hover, input:hover {
-  border-color: var(--border-focus);
-  background-color: #333;
-}
-
-select:focus, input:focus {
-  border-color: var(--nikon-yellow);
-  box-shadow: 0 0 0 1px rgba(255, 225, 0, 0.1);
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffe100' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-}
-
-/* Label 样式 */
-label {
-  font-size: 0.85em;
-  color: var(--text-sub);
-  margin-bottom: 4px;
-  display: block;
-  font-weight: 500;
-}
-
-/* Range 滑块样式优化 */
-input[type=range] {
-  -webkit-appearance: none; 
-  background: transparent;
-}
-input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  height: 14px; width: 14px;
-  border-radius: 50%;
-  background: var(--nikon-yellow);
-  cursor: pointer;
-  margin-top: -5px; 
-}
-input[type=range]::-webkit-slider-runnable-track {
-  width: 100%; height: 4px;
-  background: #444;
-  border-radius: 2px;
-}
-input[type=range]:focus::-webkit-slider-runnable-track {
-  background: #555;
-}
-
-/* =========================================
-   3. 按钮样式 (Buttons)
-   ========================================= */
-
-/* 次级按钮 (灰色边框) */
-.secondary-btn {
-  background: transparent;
-  color: #bbb;
-  border: 1px solid var(--border-color);
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.85em;
-  transition: all 0.2s;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-.secondary-btn:hover {
-  border-color: #666;
-  color: #fff;
-  background: rgba(255,255,255,0.05);
-}
-.secondary-btn.active {
-  background: #333;
-  color: var(--nikon-yellow);
-  border-color: var(--nikon-yellow);
-}
-
-/* 危险按钮 (红色) */
-.danger-btn {
-  border-color: #522;
-  color: #d66;
-}
-.danger-btn:hover {
-  border-color: #d44;
-  color: #f55;
-  background: rgba(255, 68, 68, 0.1);
-}
-
-/* 主操作按钮 (黄色实心) */
-.primary-btn {
-  background-color: var(--nikon-yellow);
-  color: #000;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 4px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: filter 0.2s;
-}
-.primary-btn:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-.primary-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  filter: grayscale(1);
-}
-
-/* =========================================
-   4. 列表与拖拽 (File List & Drop Zone)
-   ========================================= */
-
-/* 文件列表容器 */
-.file-list {
-  display: flex;
-  flex-direction: column;
-  /* 移除原来的 border，因为 Panel 已经有背景了 */
-}
-
-/* 列表项 */
-.file-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  font-size: 0.85em;
-  background: transparent;
-  transition: background 0.1s;
-}
-.file-item:last-child { border-bottom: none; }
-.file-item:hover { 
-  background-color: rgba(255,255,255,0.05); 
-}
-
-/* 列表序号 */
-.file-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  margin-right: 8px;
-  background-color: rgba(255,255,255,0.1);
-  color: #888;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 0 4px;
-}
-.file-item:hover .file-index {
-  background-color: var(--nikon-yellow);
-  color: #000;
-}
-
-/* 文件名 */
-.file-name {
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: #ddd;
-  margin-right: 10px;
-}
-
-/* 删除按钮 */
-.del-btn {
-  background: none; border: none; 
-  color: #555; cursor: pointer;
-  font-size: 16px; padding: 4px;
-  line-height: 1;
-}
-.del-btn:hover { color: #ff4d4d; }
-
-/* 1. 容器状态：当激活时，只是作为一个定位锚点 */
-.drag-active {
-  position: relative !important;
-  /* 移除容器本身的边框变色，防止和伪元素边框重叠 */
-  /* border-color: transparent !important; */
-}
-
-/* 2. 伪元素：负责所有的视觉效果（背景、虚线、文字） */
-.drag-active::after {
-  content: "释放添加图片";
-  
-  /* 绝对定位撑满容器 */
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  
-  /* 视觉样式 */
-  background: rgba(26, 26, 26, 0.9); /* 深色背景遮盖列表 */
-  border: 2px dashed var(--nikon-yellow); /* 黄色虚线 */
-  color: var(--nikon-yellow);
-  
-  /* 布局 */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  
-  /* 字体 */
-  font-size: 1.1em;
-  font-weight: bold;
-  letter-spacing: 1px;
-  
-  /* 交互 */
-  pointer-events: none; /* 让鼠标穿透 */
-  z-index: 50;
-  backdrop-filter: blur(4px);
-  
-  /* 🟢 关键：添加进入动画 */
-  animation: fadeIn 0.2s ease-out forwards;
-}
-
-/* 定义淡入动画 */
-@keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.98); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-/* =========================================
-   5. 状态徽章 (Badges)
-   ========================================= */
-.tag-exif {
-  font-family: inherit;
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 2px;
-  text-transform: uppercase;
-  margin-left: 6px;
-  vertical-align: middle;
-}
-.tag-exif.ok { color: var(--status-ok-text); background-color: var(--status-ok-bg); }
-.tag-exif.no { color: var(--status-no-text); background-color: var(--status-no-bg); }
-
-/* =========================================
-   6. 加载动画 (Spinners)
-   ========================================= */
-.spinner {
-  width: 18px; height: 18px;
-  border: 2px solid #555;
-  border-top-color: var(--nikon-yellow);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  box-sizing: border-box;
-}
-@keyframes spin { to { transform: rotate(360deg); } }

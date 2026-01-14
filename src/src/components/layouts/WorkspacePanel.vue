@@ -1,217 +1,278 @@
 <script setup>
-import { watch, ref, computed } from 'vue';
-import { invoke } from '@tauri-apps/api/core';
-import { store } from '../../store.js';
+import { ref } from 'vue';
+import { store } from '../../store/index.js'; 
 
-// ... (逻辑部分保持完全不变) ...
-const checkPreviewStatus = async () => {
-  if (!store.activeFilePath || !store.activePresetId) return;
+// 🟢 [Tauri V2 适配] 引入新的 Shell 插件路径
+// 如果你还在用 V1，请改回 '@tauri-apps/api/shell'
+import { open } from '@tauri-apps/plugin-shell';
+
+import { usePreviewLogic } from '../../composables/usePreviewLogic';
+import PreviewCanvas from '../workspace/PreviewCanvas.vue';
+import WorkspaceFooter from '../workspace/WorkspaceFooter.vue';
+import ExportSettings from '../workspace/ExportSettings.vue';
+
+const { frozenDisplay, isBusy, handleImgLoad, handleImgError } = usePreviewLogic();
+const canvasRef = ref(null);
+const handleReset = () => canvasRef.value?.resetView();
+
+const footerHeight = ref(240);
+const isDragging = ref(false);
+const currentTab = ref('preview');
+
+// 🔗 打开 GitHub 链接的函数 (Tauri 安全方式)
+const openGithub = async () => {
   try {
-    const existingPath = await invoke('check_output_exists', {
-      filePath: store.activeFilePath,
-      style: store.activePresetId 
-    });
-    if (existingPath) {
-      store.markFileProcessed(store.activeFilePath, existingPath);
-    } else {
-      store.clearProcessedStatus(store.activeFilePath);
-    }
-  } catch (e) {
-    console.error("检查文件存在性失败:", e);
+    // 替换为你真实的仓库地址
+    await open('https://github.com/Aurora0201/nikon-framer');
+  } catch (error) {
+    console.error('Failed to open URL:', error);
   }
 };
 
-watch([() => store.activeFilePath, () => store.activePresetId], () => checkPreviewStatus(), { immediate: true });
-watch(() => store.isProcessing, (newVal, oldVal) => { if (oldVal === true && newVal === false) checkPreviewStatus(); });
-
-// --- 缩放拖拽逻辑 (保持不变) ---
-const transformState = ref({
-  scale: 1, panning: false, pointX: 0, pointY: 0, startX: 0, startY: 0
-});
-
-const imageStyle = computed(() => ({
-  transform: `translate(${transformState.value.pointX}px, ${transformState.value.pointY}px) scale(${transformState.value.scale})`,
-  cursor: transformState.value.panning ? 'grabbing' : 'grab',
-  transition: transformState.value.panning ? 'none' : 'transform 0.1s ease-out'
-}));
-
-const handleWheel = (e) => {
-  e.preventDefault();
-  const zoomIntensity = 0.1;
-  const direction = e.deltaY > 0 ? -1 : 1;
-  let newScale = transformState.value.scale + (direction * zoomIntensity);
-  newScale = Math.min(Math.max(0.1, newScale), 5);
-  transformState.value.scale = newScale;
+const startResize = () => {
+  isDragging.value = true;
+  document.addEventListener('mousemove', onResize);
+  document.addEventListener('mouseup', stopResize);
+  document.body.style.userSelect = 'none';
 };
 
-const startDrag = (e) => {
-  if (e.button !== 0) return;
-  transformState.value.panning = true;
-  transformState.value.startX = e.clientX - transformState.value.pointX;
-  transformState.value.startY = e.clientY - transformState.value.pointY;
+const onResize = (e) => {
+  if (!isDragging.value) return;
+  let newHeight = window.innerHeight - e.clientY;
+  const minHeight = 100;
+  const maxHeight = window.innerHeight * 0.6;
+  if (newHeight < minHeight) newHeight = minHeight;
+  if (newHeight > maxHeight) newHeight = maxHeight;
+  footerHeight.value = newHeight;
 };
 
-const onDrag = (e) => {
-  if (!transformState.value.panning) return;
-  e.preventDefault();
-  transformState.value.pointX = e.clientX - transformState.value.startX;
-  transformState.value.pointY = e.clientY - transformState.value.startY;
-};
-
-const stopDrag = () => { transformState.value.panning = false; };
-
-const resetView = () => {
-  transformState.value = { scale: 1, panning: false, pointX: 0, pointY: 0, startX: 0, startY: 0 };
-};
-
-watch(() => store.previewSource.url, () => { resetView(); });
-
-const handleImgError = (e) => {
-  e.target.style.backgroundColor = '#333';
-  e.target.alt = "图片丢失";
+const stopResize = () => {
+  isDragging.value = false;
+  document.removeEventListener('mousemove', onResize);
+  document.removeEventListener('mouseup', stopResize);
+  document.body.style.userSelect = '';
 };
 </script>
 
 <template>
-  <div class="workspace-header">
-    <span class="tab active">👁️ 实时预览</span>
-    <span class="tab">⚙️ 导出设置</span>
-    <button class="reset-btn" @click="resetView" title="重置视图">↺</button>
-  </div>
-
-  <div 
-    class="preview-area"
-    @wheel="handleWheel"
-    @mousedown="startDrag"
-    @mousemove="onDrag"
-    @mouseup="stopDrag"
-    @mouseleave="stopDrag"
-    @dblclick="resetView"
-  >
-    <div v-if="store.previewSource.url" class="viewport-container">
-      <div class="image-wrapper" :style="imageStyle">
-        <img 
-          :src="store.previewSource.url" 
-          class="main-img" 
-          alt="Preview" 
-          @error="handleImgError"
-          draggable="false" 
-        />
+  <div class="workspace-panel-container">
+    
+    <div class="workspace-header">
+      <div class="tabs-container">
+        <span 
+          class="tab" 
+          :class="{ active: currentTab === 'preview' }"
+          @click="currentTab = 'preview'"
+        >
+          👁️ 实时预览
+        </span>
+        <span 
+          class="tab" 
+          :class="{ active: currentTab === 'settings' }"
+          @click="currentTab = 'settings'"
+        >
+          ⚙️ 导出设置
+        </span>
       </div>
       
-      <div class="status-badge" :class="store.previewSource.type">
-        {{ store.previewSource.text }}
+      <div class="header-actions">
+        <a 
+          href="javascript:void(0)" 
+          @click.prevent="openGithub"
+          class="icon-btn github" 
+          title="View on GitHub"
+        >
+          <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor" style="display: block;">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path>
+          </svg>
+        </a>
+
+        <button class="icon-btn reset" @click="handleReset" title="重置视图">
+          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <path d="M3 3v5h5"></path>
+          </svg>
+        </button>
       </div>
     </div>
 
-    <div v-else class="placeholder-preview">
-      <div style="font-size: 3em; margin-bottom: 20px;">🖼️</div>
-      <div>选择照片以预览</div>
+    <div class="workspace-body">
+      <KeepAlive>
+        <PreviewCanvas 
+          v-if="currentTab === 'preview'"
+          ref="canvasRef"
+          :display-data="frozenDisplay" 
+          :is-busy="isBusy"
+          @img-load="handleImgLoad"
+          @img-error="handleImgError"
+        />
+        <ExportSettings v-else />
+      </KeepAlive>
     </div>
-  </div>
 
-  <div class="controls-area">
-    <div class="control-row" v-if="store.activePresetId">
-        <label style="color: #666; font-size: 0.75em;">
-            当前模式: {{ store.activePresetId }}
-        </label>
+    <div 
+      v-if="currentTab === 'preview'"
+      class="resize-handle" 
+      @mousedown="startResize">
+      <div class="handle-bar"></div>
     </div>
-    
-    <div class="control-row" v-else>
-       <label style="color: #444; font-size: 0.75em;">暂无参数配置</label>
+
+    <div 
+      v-if="currentTab === 'preview'"
+      class="workspace-footer-wrapper" 
+      :style="{ height: footerHeight + 'px' }">
+      <WorkspaceFooter :active-preset-id="store.activePresetId" />
     </div>
+
   </div>
 </template>
 
 <style scoped>
-/* ... (Header 样式保持不变) ... */
-.workspace-header {
-  height: 40px;
+.workspace-panel-container {
   display: flex;
-  align-items: center;
-  padding: 0 10px;
-  background: #151515;
-  border-bottom: 1px solid #333;
-  gap: 10px;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  background: transparent;
 }
-.reset-btn { margin-left: auto; background: transparent; border: none; color: #888; cursor: pointer; font-size: 1.2em; }
-.reset-btn:hover { color: #fff; }
-.tab { padding: 4px 12px; font-size: 0.85em; color: #888; cursor: pointer; }
-.tab.active { color: #fff; background: #333; border-radius: 4px; }
 
-.preview-area {
-  flex: 1; 
-  background: #1a1a1a;
+/* 🟢 修改重点：点阵背景 + 暗角效果 */
+.workspace-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   position: relative;
   overflow: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  /* 背景纹理 */
-  background-image: 
-    linear-gradient(45deg, #222 25%, transparent 25%), 
-    linear-gradient(-45deg, #222 25%, transparent 25%), 
-    linear-gradient(45deg, transparent 75%, #222 75%), 
-    linear-gradient(-45deg, transparent 75%, #222 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-  user-select: none; 
+
+  /* --- 变量定义 (从全局变量派生或保持同步) --- */
+  --workspace-bg: var(--bg-color);
+  --workspace-dot: var(--border-color);
+  --workspace-shadow: rgba(0, 0, 0, 0.2);
+
+  /* 基础背景色 */
+  background-color: var(--workspace-bg);
+
+  /* 1. 绘制点阵 (在设置页面可以减弱或消失) */
+  background-image: radial-gradient(var(--workspace-dot) 1px, transparent 1px);
+  
+  /* 2. 控制点阵间距 */
+  background-size: 20px 20px; 
+
+  /* 3. 添加暗角 (Vignette) */
+  box-shadow: inset 0 0 120px var(--workspace-shadow);
+  
+  /* 4. 主题切换过渡 */
+  transition: background-color 0.3s ease, background-image 0.3s ease, box-shadow 0.3s ease;
 }
 
-.viewport-container {
-  width: 100%;
-  height: 100%;
+/* Light Mode Overrides for Workspace */
+:global([data-theme='light']) .workspace-body {
+  --workspace-bg: var(--bg-workspace); 
+  --workspace-dot: rgba(0, 0, 0, 0.05); 
+  --workspace-shadow: transparent; 
+}
+
+.workspace-header {
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: transparent;
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
+  z-index: 100; /* 确保层级高于 resizer */
+}
+
+.tabs-container {
+  display: flex;
+  gap: 10px;
+}
+
+.tab { 
+  padding: 4px 12px; 
+  font-size: 0.85em; 
+  color: var(--text-sub); 
+  cursor: pointer; 
+  transition: color 0.2s;
+  user-select: none;
+}
+.tab:hover { color: var(--text-main); }
+.tab.active { 
+  color: var(--text-main); 
+  background: var(--input-bg); 
+  border-radius: 6px; 
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-sub);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  line-height: 0;
+}
+
+.icon-btn:hover {
+  background: var(--input-bg);
+  color: var(--text-main);
+}
+
+/* GitHub 按钮特有样式 */
+.icon-btn.github:hover {
+  color: var(--text-main); 
+}
+
+/* Reset 按钮特有样式 */
+.icon-btn.reset:hover {
+  color: var(--bright-blue, #646cff);
+  transform: rotate(-30deg);
+}
+
+.resize-handle {
+  height: 10px;
+  margin-top: -5px;
+  cursor: ns-resize;
+  z-index: 50;
   display: flex;
   justify-content: center;
   align-items: center;
+  flex-shrink: 0;
   position: relative;
 }
 
-.image-wrapper {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  transform-origin: center center;
-  will-change: transform;
-  /* 确保 wrapper 本身占满空间，方便计算中心 */
+.resize-handle .handle-bar {
   width: 100%;
-  height: 100%;
+  height: 1px;
+  background: var(--border-color);
+  transition: all 0.2s;
 }
 
-.main-img {
-  /* 🟢 修改点 2: 调整图片尺寸 */
-  /* 改为 80% (或 85%)，这样四周会有留白，不会撑满 */
-  max-width: 80%;
-  max-height: 80%;
-  
-  object-fit: contain;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-  pointer-events: none; 
+.resize-handle:hover .handle-bar {
+  height: 3px;
+  background: var(--bright-blue, #646cff);
+  width: 40px;
+  border-radius: 2px;
 }
 
-.status-badge {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 0.8em;
-  font-weight: bold;
-  color: white;
-  z-index: 10;
-  pointer-events: none;
+.workspace-footer-wrapper {
+  flex-shrink: 0;
+  background: transparent;
+  overflow: hidden;
 }
-.status-badge.preset { background: rgba(100, 100, 100, 0.8); }
-.status-badge.result { background: rgba(16, 185, 129, 0.9); }
-
-.placeholder-preview { color: #444; text-align: center; }
-
-.controls-area {
-  height: 100px; /* 高度可以稍微调小一点，因为内容少了 */
-  background: #111;
-  border-top: 1px solid #333;
-  padding: 20px;
-}
-.control-row { margin-bottom: 15px; }
-label { display: block; color: #888; font-size: 0.85em; margin-bottom: 8px; }
 </style>

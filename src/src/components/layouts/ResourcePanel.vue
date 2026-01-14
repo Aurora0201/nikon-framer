@@ -1,45 +1,32 @@
 <script setup>
-import { watch } from 'vue';
+import { watch } from 'vue'; 
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
-import { store } from '../../store.js';
+import { store } from '../../store/index.js'; 
+// 🟢 1. 直接引入静态配置数组
+import { CATEGORY_OPTIONS } from '../../frames/registry.js'; 
+import LazyThumbnail from '../common/LazyThumbnail.vue';
 
-// --- 辅助逻辑：处理路径数组 ---
+// --- 辅助逻辑 & 按钮动作 (保持原样，没有任何修改) ---
 const handlePathList = (paths) => {
-  // 1. 过滤图片后缀
   const validPaths = paths.filter(p => /\.(jpg|jpeg|png|webp|tif|tiff|nef|dng|arw)$/i.test(p));
-  
   if (validPaths.length > 0) {
-    // 2. 构造基础对象 (只关心 name 和 path)
-    // ❌ 不再需要手动写 exifStatus: 'wait'，也不需要手动判断 setActiveFile
-    const files = validPaths.map(pathStr => ({
-      name: pathStr.replace(/^.*[\\/]/, ''),
-      path: pathStr
-    }));
-    
-    // 3. 扔给 Store，它会搞定去重、状态初始化、自动选中
+    const files = validPaths.map(pathStr => ({ name: pathStr.replace(/^.*[\\/]/, ''), path: pathStr }));
     store.addFiles(files);
   }
 };
 
-// --- 按钮动作：添加文件 ---
 const addFiles = async () => {
   if (store.isProcessing) return;
   try {
-    const selected = await open({
-      multiple: true,
-      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'nef', 'dng', 'arw'] }]
-    });
-    
+    const selected = await open({ multiple: true, filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'nef', 'dng', 'arw'] }] });
     if (selected) {
-      // 兼容处理 Tauri dialog 返回格式
       const paths = selected.map(item => typeof item === 'string' ? item : item.path);
       handlePathList(paths);
     }
   } catch (err) { console.error(err); }
 };
 
-// --- 按钮动作：添加文件夹 ---
 const addFolder = async () => {
   if (store.isProcessing) return;
   try {
@@ -51,10 +38,9 @@ const addFolder = async () => {
   } catch (err) { console.error(err); }
 };
 
-// --- EXIF 监听 (UI 层的副作用，保留在这里合适) ---
+// --- EXIF 监听 & 列表操作 (保持原样) ---
 watch(() => store.fileQueue, (newQueue) => {
   newQueue.forEach(async (file) => {
-    // 这里的 file.exifStatus 是由 Store.addFiles 初始化的
     if (file.exifStatus === 'wait') {
       file.exifStatus = 'scanning'; 
       try {
@@ -65,21 +51,9 @@ watch(() => store.fileQueue, (newQueue) => {
   });
 }, { deep: true, immediate: true });
 
-// --- 列表操作 (极度简化) ---
 const selectFile = (path) => store.setActiveFile(path);
-
-const removeFile = (e, index) => {
-  e.stopPropagation();
-  // 🟢 直接调用，Store 内部会处理 activeFilePath 的重置逻辑
-  store.removeFile(index);
-};
-
-const clearAll = () => {
-  if(confirm('确定清空列表?')) {
-    // 🟢 直接调用
-    store.clearQueue();
-  }
-};
+const removeFile = (e, index) => { e.stopPropagation(); store.removeFile(index); };
+const clearAll = () => store.clearQueue(); 
 </script>
 
 <template>
@@ -92,16 +66,16 @@ const clearAll = () => {
   </div>
   
   <div class="panel-body">
+    
     <div class="section">
-      <label class="section-title">边框模式 / Mode</label>
-      
+      <label class="section-title">样式分类 / Category</label>
       <select 
         :value="store.settings.style" 
-        @change="(e) => store.setMode(e.target.value)"
+        @change="(e) => store.setCategory(e.target.value)"
         class="mode-select"
       >
         <option 
-          v-for="opt in store.modeOptions" 
+          v-for="opt in CATEGORY_OPTIONS" 
           :key="opt.value" 
           :value="opt.value"
         >
@@ -111,15 +85,14 @@ const clearAll = () => {
     </div>
 
     <div class="section file-list-section">
-      <div class="list-header-row">
-        <label class="section-title">队列 ({{ store.fileQueue.length }})</label>
-        <button v-if="store.fileQueue.length > 0" @click="clearAll" class="clear-btn">清空</button>
-      </div>
+    <div class="list-header-row">
+      <label class="section-title">队列 ({{ store.fileQueue.length }})</label>
+      <button v-if="store.fileQueue.length > 0" @click="clearAll" class="clear-btn">清空</button>
+    </div>
+    
+    <div class="list-viewport">
       
-      <div 
-        class="file-list"
-        :class="{ 'drag-active': store.isDragging }"
-      >
+      <div class="file-list">
         <div v-if="store.fileQueue.length === 0" class="empty-tip">
           <div style="font-size: 2em; margin-bottom: 10px;">📥</div>
           <div>拖入照片<br>或使用上方按钮</div>
@@ -134,63 +107,218 @@ const clearAll = () => {
           @click="selectFile(file.path)"
         >
           <div class="item-left">
-            <span class="file-index">{{ index + 1 }}</span>
-            <div class="name-col">
-              <span class="file-name" :title="file.name">{{ file.name }}</span>
-              <span class="exif-badge" :class="file.exifStatus">
-                {{ file.exifStatus === 'ok' ? 'EXIF' : (file.exifStatus === 'scanning' ? '...' : 'NO EXIF') }}
-              </span>
+              <LazyThumbnail :path="file.path" class="list-thumb" />
+              <div class="name-col">
+                <div class="name-row">
+                  <span class="file-index">{{ index + 1 }}</span>
+                  <span class="file-name" :title="file.name">{{ file.name }}</span>
+                </div>
+                <span class="exif-badge" :class="file.exifStatus">
+                  {{ file.exifStatus === 'ok' ? 'EXIF DATA' : (file.exifStatus === 'scanning' ? 'SCANNING...' : 'NO EXIF') }}
+                </span>
+              </div>
             </div>
-          </div>
-          
-          <button @click="(e) => removeFile(e, index)" class="del-btn">×</button>
+            <button @click="(e) => removeFile(e, index)" class="del-btn">×</button>
         </div>
       </div>
+
+      <div v-if="store.isDragging" class="drag-overlay">
+        <div class="overlay-content">
+          <span style="font-size: 2em">📂</span>
+          <span>释放添加图片</span>
+        </div>
+      </div>
+
     </div>
+  </div>
   </div>
 </template>
 
 <style scoped>
-/* 样式保持不变，复用你之前确认过的那一套即可 */
-/* 为了节省篇幅，这里不再重复粘贴 CSS */
+/* =========================================
+   1. 面板头部 (Header)
+   ========================================= */
 .panel-header {
-  height: 40px; display: flex; align-items: center; justify-content: space-between;
-  padding: 0 12px; background: #1a1a1a; border-bottom: 1px solid #333;
-  font-weight: 600; font-size: 0.9em; color: #ccc; flex-shrink: 0;
+  height: 40px; 
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 12px; 
+  background: transparent; 
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 600; font-size: 0.9em; 
+  color: var(--text-main); 
+  flex-shrink: 0;
 }
+
 .header-actions { display: flex; gap: 8px; }
+
 .icon-btn-mini {
-  background: #333; border: 1px solid #444; color: #fff; width: 26px; height: 26px;
-  border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px;
+  background: var(--input-bg); 
+  border: 1px solid var(--border-color); 
+  color: var(--text-sub); 
+  width: 26px; height: 26px;
+  border-radius: 6px; cursor: pointer; 
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+  transition: all 0.2s;
 }
-.icon-btn-mini:hover { background: #444; border-color: #666; }
+.icon-btn-mini:hover { 
+  background: var(--bg-color); /* Slightly different on hover */
+  border-color: var(--text-sub);
+  color: var(--text-main);
+}
+
+/* =========================================
+   2. 主体区域 (Body)
+   ========================================= */
 .panel-body {
-  flex: 1; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px;
+  flex: 1; padding: 12px; overflow: hidden; 
+  display: flex; flex-direction: column; gap: 20px;
 }
+
 .section { display: flex; flex-direction: column; }
 .section-title {
-  display: block; font-size: 0.75em; color: #666; margin-bottom: 6px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;
+  display: block; font-size: 0.75em; 
+  color: var(--text-sub); 
+  margin-bottom: 8px; 
+  text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;
 }
-.mode-select { width: 100%; }
+
+/* =========================================
+   3. 下拉选框 (Select) - 调亮，不再死黑
+   ========================================= */
+.mode-select {
+  width: 100%;
+  
+  background-color: var(--input-bg); 
+  color: var(--text-main);
+  
+  border: 1px solid var(--border-color);
+  
+  padding: 8px 10px; border-radius: 6px; outline: none; font-size: 0.9em; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  
+  /* Use a generic svg icon or encoded one that works on dark/light */
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 16px; padding-right: 35px;
+  
+  transition: all 0.2s;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); 
+}
+.mode-select:focus { 
+  border-color: var(--border-focus); 
+}
+.mode-select:hover { border-color: var(--text-sub); }
+.mode-select option { background-color: var(--input-bg); color: var(--text-main); }
+
+/* =========================================
+   4. 列表视口 (Viewport) - 调亮底色
+   ========================================= */
 .file-list-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
 .list-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.clear-btn { background: none; border: none; color: #555; font-size: 0.75em; cursor: pointer; padding: 0; }
-.clear-btn:hover { color: #d44; text-decoration: underline; }
-.file-list {
-  flex: 1; overflow-y: auto; display: flex; flex-direction: column;
-  border: 1px solid #222; border-radius: 4px;
+.clear-btn { background: none; border: none; color: var(--text-sub); font-size: 0.75em; cursor: pointer; padding: 0; }
+.clear-btn:hover { color: var(--status-no-text); text-decoration: underline; }
+
+.list-viewport {
+  flex: 1; position: relative; overflow: hidden; display: flex;
+  
+  background: var(--inner-bg); 
+  
+  border: 1px solid var(--border-color);
+  /* 仅保留微弱的内阴影 */
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+  
+  border-radius: 6px;
 }
-.file-item { cursor: pointer; }
-.file-item.active { background: #2c2c2c; border-left: 3px solid var(--nikon-yellow); padding-left: 9px; }
-.file-item.active .file-name { color: #fff; }
-.file-item.active .file-index { color: var(--nikon-yellow); background: rgba(255,225,0,0.1); }
-.item-left { display: flex; align-items: center; overflow: hidden; gap: 8px; flex: 1; }
-.name-col { display: flex; flex-direction: column; overflow: hidden; gap: 2px; }
-.exif-badge { font-size: 9px; padding: 1px 4px; border-radius: 2px; background: #333; color: #666; width: fit-content; font-weight: bold; }
-.exif-badge.ok { background: rgba(102, 187, 106, 0.15); color: #66bb6a; }
-.exif-badge.no { background: rgba(183, 28, 28, 0.2); color: #ef5350; }
-.exif-badge.scanning { color: var(--nikon-yellow); }
-.empty-tip { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #444; font-size: 0.85em; min-height: 150px; user-select: none; }
-.del-btn { background: none; border: none; color: #444; cursor: pointer; font-size: 1.2em; line-height: 1; padding: 0 5px; }
-.del-btn:hover { color: #d44; }
+
+.file-list { flex: 1; overflow-y: auto; width: 100%; display: flex; flex-direction: column; }
+
+/* =========================================
+   5. 列表项 (File Item) - 核心修改
+   ========================================= */
+.file-item {
+  padding: 8px 10px; height: 64px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex; align-items: center; justify-content: space-between;
+  transition: background 0.2s;
+  position: relative; /* 为伪元素定位 */
+}
+
+/* 悬停 */
+.file-item:hover { background: var(--nikon-yellow-dim); }
+
+/* 🟢 选中状态 */
+.file-item.active {
+  background: linear-gradient(90deg, var(--nikon-yellow-dim) 0%, transparent 100%);
+  border-left: 3px solid var(--nikon-yellow);
+  padding-left: 7px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.item-left { display: flex; align-items: center; overflow: hidden; gap: 12px; flex: 1; }
+
+.list-thumb { 
+  margin-right: 0; flex-shrink: 0; 
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  opacity: 0.9;
+}
+
+/* 序号标签 */
+.file-index {
+  font-family: inherit; font-size: 0.7em; font-weight: 700;
+  
+  color: var(--text-sub); 
+  background: rgba(125, 125, 125, 0.1); 
+  
+  width: 18px; height: 18px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1;
+}
+
+/* 选中时：实心黄，文字变黑 */
+.file-item.active .file-index { 
+  background: var(--nikon-yellow); 
+  color: #121212; 
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.4); 
+}
+
+.name-col { display: flex; flex-direction: column; gap: 4px; overflow: hidden; justify-content: center; }
+.name-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+
+.file-name {
+  font-size: 0.9em; font-weight: 500;
+  color: var(--text-main); 
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;
+}
+/* 选中文字高亮 */
+.file-item.active .file-name { color: var(--text-main); font-weight: 600; text-shadow: none; }
+
+/* EXIF 徽章 */
+.exif-badge {
+  font-size: 9px; padding: 1px 5px; border-radius: 3px;
+  background: rgba(125, 125, 125, 0.1); 
+  color: var(--text-sub); 
+  width: fit-content; font-weight: 600; letter-spacing: 0.3px;
+}
+.exif-badge.ok { 
+  background: var(--status-ok-bg); 
+  color: var(--status-ok-text); 
+}
+.exif-badge.no { 
+  background: var(--status-no-bg); 
+  color: var(--status-no-text); 
+}
+.exif-badge.scanning { color: var(--nikon-yellow); background: rgba(255, 215, 0, 0.1); }
+
+.del-btn {
+  background: none; border: none; color: var(--text-sub); 
+  cursor: pointer; font-size: 1.4em; line-height: 1; padding: 0 5px; margin-left: 5px;
+  transition: color 0.2s;
+}
+.del-btn:hover { color: var(--status-no-text); }
+
+.empty-tip {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; color: var(--text-sub); 
+  font-size: 0.85em; min-height: 150px; user-select: none;
+}
 </style>

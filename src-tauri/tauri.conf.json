@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "nikon-framer",
-  "version": "1.1.0",
+  "version": "2.0.1",
   "identifier": "com.tauri-app.nikon-framer",
   "build": {
     "beforeDevCommand": "npm run dev --prefix src",
@@ -15,8 +15,10 @@
       {
         "title": "nikon-framer",
         "minWidth": 1000,
-        "minHeight": 700
-        
+        "minHeight": 700,
+        "decorations": false, 
+        "transparent": true,
+        "shadow": false
       }
     ],
     "security": {
@@ -34,7 +36,7 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "assets/fonts/*" 
+      "assets/**/*" 
     ]
   }
 }

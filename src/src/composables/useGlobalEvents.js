@@ -2,7 +2,7 @@
 import { onMounted, onUnmounted } from 'vue';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
-import { store } from '../store.js';
+import { store } from '../store/index.js';
 
 export function useGlobalEvents() {
   // 保存监听器的卸载函数
