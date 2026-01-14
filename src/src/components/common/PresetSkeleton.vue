@@ -11,8 +11,8 @@
 
 <style scoped>
 .skeleton-card {
-  background-color: #222;
-  border: 1px solid #333;
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
   position: relative;
@@ -31,20 +31,20 @@
 .skeleton-img {
   width: 100%;
   height: 90px; /* 模拟图片高度 */
-  background-color: #2a2a2a;
+  background-color: var(--input-bg);
 }
 
 .skeleton-title {
   width: 60%;
   height: 14px;
-  background-color: #2a2a2a;
+  background-color: var(--input-bg);
   border-radius: 4px;
 }
 
 .skeleton-desc {
   width: 90%;
   height: 10px;
-  background-color: #2a2a2a;
+  background-color: var(--input-bg);
   border-radius: 4px;
 }
 
@@ -52,7 +52,7 @@
 .shimmer {
   position: relative;
   overflow: hidden;
-  background: #2a2a2a;
+  background: var(--input-bg);
 }
 
 .shimmer::after {

@@ -15,8 +15,10 @@
       {
         "title": "nikon-framer",
         "minWidth": 1000,
-        "minHeight": 700
-        
+        "minHeight": 700,
+        "decorations": false, 
+        "transparent": true,
+        "shadow": false
       }
     ],
     "security": {

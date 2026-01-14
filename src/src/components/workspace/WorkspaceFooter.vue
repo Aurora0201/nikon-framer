@@ -41,7 +41,7 @@ const activePanelComponent = computed(() => {
   height: 100%;          /* 关键：继承 WorkspacePanel 传来的 height */
   display: flex;         /* 启用 Flex 布局 */
   flex-direction: column;/* 垂直排列 */
-  background: #1a1a1a;   /* 基础背景色，防止透明穿透 */
+  background: transparent;   /* 基础背景色，防止透明穿透 */
   overflow: hidden;      /* 防止整体溢出 */
   box-sizing: border-box;
 }
@@ -51,8 +51,8 @@ const activePanelComponent = computed(() => {
 .footer-actions {
   flex-shrink: 0;        /* 关键：空间不足时，这两块绝对不能被压扁 */
   padding: 10px 20px;
-  border-top: 1px solid #333; /* 视觉分隔 */
-  border-bottom: 1px solid #333;
+  border-top: 1px solid var(--border-color); /* 视觉分隔 */
+  border-bottom: 1px solid var(--border-color);
 }
 
 /* 3. 中间滚动区域 (核心修复) */
@@ -63,18 +63,20 @@ const activePanelComponent = computed(() => {
   
   padding: 15px 20px;    /* 内部间距 */
   position: relative;
+  /* background-color: transparent; */
+  border-radius: var(--app-radius);
 }
 
 /* =========================================
    基础视觉样式 (Minimal Styling)
    ========================================= */
 .label {
-  color: #888;
+  color: var(--text-sub);
   font-size: 0.8em;
 }
 
 /* 滚动条微调 (可选，为了不难看) */
 .footer-body-scroll::-webkit-scrollbar { width: 6px; }
-.footer-body-scroll::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+.footer-body-scroll::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
 .footer-body-scroll::-webkit-scrollbar-track { background: transparent; }
 </style>

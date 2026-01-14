@@ -22,6 +22,7 @@ use tauri_plugin_log::{Target, TargetKind};
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_shell::init())
         .plugin(
             tauri_plugin_log::Builder::new()
                 // 可选配置：设置日志轮转 (防止日志无限大)

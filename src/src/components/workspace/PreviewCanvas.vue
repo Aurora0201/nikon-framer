@@ -143,48 +143,100 @@ defineExpose({ resetView });
 </template>
 
 <style scoped>
-/* 背景等样式保持不变 */
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
-.preview-area { flex: 1; background: #1a1a1a; position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center; user-select: none; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.preview-area { 
+  flex: 1; 
+  /* 🟢 保持 transparent，让父组件的点阵背景透过来 */
+  background: transparent; 
+  position: relative; 
+  overflow: hidden; 
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  user-select: none; 
+}
+
 .viewport-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; position: relative; overflow: hidden; }
 
-/* 🟢 [关键修复 1] 彻底移除尺寸限制 */
-/* 让 Wrapper 诚实地变成图片原本的大小（比如 6000x4000） */
-/* 这样 JS 算出来的 Scale 才是准确的 (比如 0.15) */
 .image-wrapper {
   position: relative;
-  width: max-content; /* 强制撑开，不换行 */
+  width: max-content;
   height: max-content;
   display: flex;
   justify-content: center;
   align-items: center;
-  
   transform-origin: center center;
-  /* will-change: transform; */
-
-  /* 🟢 告诉浏览器使用高质量缩放 (主要针对 Chrome/Edge) */
-  image-rendering: -webkit-optimize-contrast; /* 旧版 Chrome */
-  image-rendering: high-quality; /* 现代浏览器标准 */
-  
-  /* 防止某些浏览器默认使用了 pixelated (像素化) */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: high-quality;
   image-rendering: auto;
 }
 
-/* 🟢 [关键修复 2] 图片还原真身 */
 .main-img {
   display: block;
-  /* ❌ 删掉 max-width/height */
-  /* 让图片以原始分辨率渲染，JS 负责把它缩放回屏幕内 */
   width: auto;
   height: auto; 
-  
-  box-shadow: 0 50px 100px rgba(0,0,0,0.5); /* 阴影大一点，因为图片本身很大 */
+  /* 阴影稍微收敛一点，更精致 */
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6); 
   pointer-events: none; 
-  
 }
 
-.status-badge { position: absolute; top: 20px; right: 20px; padding: 6px 12px; border-radius: 4px; font-size: 0.8em; font-weight: bold; color: white; z-index: 10; pointer-events: none; }
-.status-badge.preset { background: rgba(100, 100, 100, 0.8); }
-.status-badge.result { background: rgba(16, 185, 129, 0.9); }
-.placeholder-preview { color: #444; text-align: center; }
+/* =========================================
+   🟢 毛玻璃标签 (Glassmorphism Badge) 
+   ========================================= */
+.status-badge { 
+  position: absolute; 
+  top: 24px; 
+  right: 24px; 
+  padding: 8px 16px; 
+  
+  /* 字体设置 */
+  font-size: 0.85em; 
+  font-weight: 600; 
+  color: #fff; /* Default text color for dark mode badges */
+  letter-spacing: 0.5px;
+  
+  /* 形状 */
+  border-radius: 8px; 
+  z-index: 10; 
+  pointer-events: none; 
+  
+  /* 🟢 核心毛玻璃效果 */
+  backdrop-filter: blur(12px); 
+  -webkit-backdrop-filter: blur(12px); 
+  
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-top-color: rgba(255, 255, 255, 0.25);
+  border-left-color: rgba(255, 255, 255, 0.25);
+
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  
+  transition: all 0.3s ease;
+}
+
+/* ⚪ 状态 A：编辑预览 */
+.status-badge.preset { 
+  background: rgba(30, 30, 30, 0.65); 
+}
+:global([data-theme='light']) .status-badge.preset {
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+}
+
+/* 🟢 状态 B：结果预览 */
+.status-badge.result { 
+  background: rgba(16, 185, 129, 0.55); 
+  border-color: rgba(16, 185, 129, 0.3);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); 
+  text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+:global([data-theme='light']) .status-badge.result {
+  color: #fff; /* Keep green badge text white for contrast */
+  text-shadow: none;
+}
+
+.placeholder-preview { color: var(--text-sub); text-align: center; }
 </style>
