@@ -72,7 +72,7 @@ import { store } from '../../store/index.js';
 
 /* 标签样式 */
 label {
-  color: #aaa;
+  color: var(--text-sub);
   font-size: 0.9em;
   font-weight: bold;
   display: flex;
@@ -82,19 +82,19 @@ label {
 
 /* 数值高亮 */
 .value-tag {
-  color: #4caf50;
+  color: var(--status-ok-text);
   font-family: monospace;
   font-size: 0.9em;
-  background: rgba(76, 175, 80, 0.1);
+  background: var(--status-ok-bg);
   padding: 2px 6px;
   border-radius: 4px;
 }
 
 /* 文本输入框美化 */
 .sig-input {
-  background: #222;
-  border: 1px solid #444;
-  color: #fff;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
   padding: 10px 12px;
   border-radius: 6px;
   font-size: 1em;
@@ -103,16 +103,16 @@ label {
 }
 
 .sig-input:focus {
-  border-color: #646cff; /* 聚焦时变亮紫/蓝色 */
-  background: #2a2a2a;
-  box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.2);
+  border-color: var(--border-focus); 
+  background: var(--input-bg);
+  box-shadow: 0 0 0 2px var(--nikon-yellow-dim);
 }
 
 /* 滑块条美化 (兼容 Webkit) */
 .range-input {
   width: 100%;
   height: 6px;
-  background: #333;
+  background: var(--border-color);
   border-radius: 3px;
   outline: none;
   cursor: pointer;
@@ -123,23 +123,23 @@ label {
   -webkit-appearance: none;
   width: 16px;
   height: 16px;
-  background: #bbb;
+  background: var(--text-sub);
   border-radius: 50%;
   transition: transform 0.1s, background-color 0.2s;
 }
 
 .range-input::-webkit-slider-thumb:hover {
   transform: scale(1.2);
-  background: #fff;
+  background: var(--text-main);
 }
 
 /* 底部提示文字 */
 .hint {
-  color: #555;
+  color: var(--text-sub);
   font-size: 0.75em;
   margin-top: 10px;
   text-align: center;
-  border-top: 1px dashed #333;
+  border-top: 1px dashed var(--border-color);
   padding-top: 10px;
 }
 </style>

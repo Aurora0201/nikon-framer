@@ -118,11 +118,18 @@ const selectFolder = async () => {
   width: 100%; 
   height: 100%;
   padding: 20px 30px;
-  color: #ccc;
+  color: var(--text-sub);
   
-  /* 🟢 修改 1: 永远预留滚动条空间，防止内容跳动 */
+  /* 🟢 使用中间层背景，确保视觉平滑 */
+  background: var(--bg-preset);
+  backdrop-filter: blur(20px);
+  
   overflow-y: auto;
   scrollbar-gutter: stable; 
+}
+
+:global([data-theme='light']) .settings-container {
+  background: rgba(255, 255, 255, 0.7);
 }
 
 /* 限制内容宽度居中 */
@@ -131,7 +138,7 @@ const selectFolder = async () => {
 .setting-group { margin-bottom: 25px; }
 
 .group-header {
-  font-size: 1.1em; font-weight: bold; color: #fff;
+  font-size: 1.1em; font-weight: bold; color: var(--text-main);
   margin-bottom: 15px; display: flex; align-items: center; gap: 8px;
 }
 .icon { font-size: 1.2em; }
@@ -142,23 +149,24 @@ const selectFolder = async () => {
   display: flex; align-items: center; gap: 10px; cursor: pointer;
   padding: 8px 12px; border-radius: 4px; transition: background 0.2s;
   border: 1px solid transparent;
+  color: var(--text-main);
 }
-.radio-label:hover { background: #252525; }
-.radio-label:has(input:checked) { background: #2a2a2a; border-color: #444; }
+.radio-label:hover { background: var(--input-bg); }
+.radio-label:has(input:checked) { background: var(--input-bg); border-color: var(--border-color); }
 .radio-label input { accent-color: var(--nikon-yellow); transform: scale(1.1); }
 
 /* 🟢 修改 2: 路径预览卡片样式调整 */
 .path-preview-card {
   margin-top: 10px;
-  background: #181818;
-  border: 1px solid #333;
-  border-left: 3px solid #666;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--text-sub);
   padding: 10px 12px;
   border-radius: 4px;
   
   /* ❌ 删掉了 font-family: monospace; 让它继承全局字体 */
   font-size: 0.85em;
-  color: #888;
+  color: var(--text-sub);
   
   /* 保持换行逻辑，防止路径太长撑破容器 */
   word-break: break-all; 
@@ -167,37 +175,38 @@ const selectFolder = async () => {
 
 .radio-group:has(input[value="custom"]:checked) ~ .path-preview-card {
   border-left-color: var(--nikon-yellow);
-  color: #ccc;
+  color: var(--text-main);
 }
 
 .path-preview-card .label { font-size: 0.85em; margin-bottom: 4px; opacity: 0.7; font-weight: 600; }
 .path-action-row { margin-left: 28px; margin-bottom: 10px; }
 .browse-btn {
-  background: #333; color: #fff; border: 1px solid #555;
+  background: var(--input-bg); color: var(--text-main); border: 1px solid var(--border-color);
   padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em;
+  transition: all 0.2s;
 }
-.browse-btn:hover { background: #444; border-color: #777; }
+.browse-btn:hover { background: var(--border-color); border-color: var(--text-sub); }
 
-.divider { height: 1px; background: #333; margin: 30px 0; }
+.divider { height: 1px; background: var(--border-color); margin: 30px 0; }
 
 /* 格式卡片 */
 .format-options { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
 .radio-card {
-  background: #222; border: 1px solid #333;
+  background: var(--card-bg); border: 1px solid var(--border-color);
   padding: 15px; border-radius: 6px; cursor: pointer; text-align: center;
   transition: all 0.2s;
 }
-.radio-card:hover { border-color: #555; background: #2a2a2a; }
+.radio-card:hover { border-color: var(--text-sub); background: var(--input-bg); }
 .radio-card.active {
-  border-color: var(--nikon-yellow); background: rgba(255, 225, 0, 0.05); color: #fff;
+  border-color: var(--nikon-yellow); background: var(--nikon-yellow-dim, rgba(255, 225, 0, 0.05)); color: var(--text-main);
 }
-.fmt-name { display: block; font-weight: bold; font-size: 1.2em; margin-bottom: 4px; }
-.fmt-desc { display: block; font-size: 0.8em; color: #777; }
+.fmt-name { display: block; font-weight: bold; font-size: 1.2em; margin-bottom: 4px; color: var(--text-main); }
+.fmt-desc { display: block; font-size: 0.8em; color: var(--text-sub); }
 
 /* 滑块 */
-.quality-box { background: #1e1e1e; padding: 15px; border-radius: 6px; border: 1px solid #2a2a2a; }
-.slider-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.9em; }
+.quality-box { background: var(--card-bg); padding: 15px; border-radius: 6px; border: 1px solid var(--border-color); }
+.slider-header { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 0.9em; color: var(--text-main); }
 .val-text { color: var(--nikon-yellow); font-weight: bold; }
 .slider { width: 100%; accent-color: var(--nikon-yellow); cursor: pointer; }
-.slider-hint { display: flex; justify-content: space-between; font-size: 0.75em; color: #555; margin-top: 5px; }
+.slider-hint { display: flex; justify-content: space-between; font-size: 0.75em; color: var(--text-sub); margin-top: 5px; }
 </style>

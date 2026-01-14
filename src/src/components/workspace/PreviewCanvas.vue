@@ -194,7 +194,7 @@ defineExpose({ resetView });
   /* 字体设置 */
   font-size: 0.85em; 
   font-weight: 600; 
-  color: rgba(255, 255, 255, 0.95); 
+  color: #fff; /* Default text color for dark mode badges */
   letter-spacing: 0.5px;
   
   /* 形状 */
@@ -203,37 +203,40 @@ defineExpose({ resetView });
   pointer-events: none; 
   
   /* 🟢 核心毛玻璃效果 */
-  backdrop-filter: blur(12px); /* 背景模糊 */
-  -webkit-backdrop-filter: blur(12px); /* Safari 兼容 */
+  backdrop-filter: blur(12px); 
+  -webkit-backdrop-filter: blur(12px); 
   
-  /* 边框高光：给顶部和左侧加一点亮光，模拟玻璃厚度 */
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-top-color: rgba(255, 255, 255, 0.25);
   border-left-color: rgba(255, 255, 255, 0.25);
 
-  /* 阴影：让标签浮起来 */
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
   
-  /* 动画 */
   transition: all 0.3s ease;
 }
 
-/* ⚪ 状态 A：编辑预览 (中性深色玻璃) */
+/* ⚪ 状态 A：编辑预览 */
 .status-badge.preset { 
-  /* 半透明黑色背景 */
   background: rgba(30, 30, 30, 0.65); 
 }
+:global([data-theme='light']) .status-badge.preset {
+  background: rgba(255, 255, 255, 0.65);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+}
 
-/* 🟢 状态 B：结果预览 (绿色微光玻璃) */
+/* 🟢 状态 B：结果预览 */
 .status-badge.result { 
-  /* 半透明绿色背景 */
   background: rgba(16, 185, 129, 0.55); 
-  
-  /* 绿色状态下，边框和阴影也带一点绿 */
   border-color: rgba(16, 185, 129, 0.3);
   box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); 
   text-shadow: 0 1px 2px rgba(0,0,0,0.2);
 }
+:global([data-theme='light']) .status-badge.result {
+  color: #fff; /* Keep green badge text white for contrast */
+  text-shadow: none;
+}
 
-.placeholder-preview { color: #555; text-align: center; }
+.placeholder-preview { color: var(--text-sub); text-align: center; }
 </style>

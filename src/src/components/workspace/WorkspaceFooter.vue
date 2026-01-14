@@ -51,8 +51,8 @@ const activePanelComponent = computed(() => {
 .footer-actions {
   flex-shrink: 0;        /* 关键：空间不足时，这两块绝对不能被压扁 */
   padding: 10px 20px;
-  border-top: 1px solid #333; /* 视觉分隔 */
-  border-bottom: 1px solid #333;
+  border-top: 1px solid var(--border-color); /* 视觉分隔 */
+  border-bottom: 1px solid var(--border-color);
 }
 
 /* 3. 中间滚动区域 (核心修复) */
@@ -71,12 +71,12 @@ const activePanelComponent = computed(() => {
    基础视觉样式 (Minimal Styling)
    ========================================= */
 .label {
-  color: #888;
+  color: var(--text-sub);
   font-size: 0.8em;
 }
 
 /* 滚动条微调 (可选，为了不难看) */
 .footer-body-scroll::-webkit-scrollbar { width: 6px; }
-.footer-body-scroll::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+.footer-body-scroll::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
 .footer-body-scroll::-webkit-scrollbar-track { background: transparent; }
 </style>

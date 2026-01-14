@@ -48,6 +48,16 @@ export const store = reactive({
     quality: 90,          // 1-100 (仅 JPG/WebP)
     resize: 'none',       // 'none' | 'short-2048' | 'short-4096' (预留)
   },
+
+  // 🟢 [新增] 颜色模式
+  theme: localStorage.getItem('app-theme') || 'dark', // 'dark' | 'light'
+
+  // 🟢 [新增] 切换颜色模式
+  toggleTheme() {
+    this.theme = this.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('app-theme', this.theme);
+  },
+
   // =========================================
   // Getters (计算属性)
   // =========================================
@@ -277,4 +287,13 @@ watch(
     store.loadModeParams(newId);
   },
   { immediate: true } // 初始化时立即执行一次
+);
+
+// 🟢 [自动监听] 监听 theme 变化，应用到 html 标签
+watch(
+  () => store.theme,
+  (newTheme) => {
+    document.documentElement.setAttribute('data-theme', newTheme);
+  },
+  { immediate: true }
 );

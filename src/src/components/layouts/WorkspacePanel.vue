@@ -147,19 +147,32 @@ const stopResize = () => {
   position: relative;
   overflow: hidden;
 
-  /* 基础背景色 */
-  background-color: #151515;
+  /* --- 变量定义 (从全局变量派生或保持同步) --- */
+  --workspace-bg: var(--bg-color);
+  --workspace-dot: var(--border-color);
+  --workspace-shadow: rgba(0, 0, 0, 0.2);
 
-  /* 1. 绘制点阵 */
-  /* radial-gradient 创建圆形点：#2a2a2a 是点的颜色(比背景稍亮), transparent 是间隙 */
-  background-image: radial-gradient(#2a2a2a 1px, transparent 1px);
+  /* 基础背景色 */
+  background-color: var(--workspace-bg);
+
+  /* 1. 绘制点阵 (在设置页面可以减弱或消失) */
+  background-image: radial-gradient(var(--workspace-dot) 1px, transparent 1px);
   
   /* 2. 控制点阵间距 */
-  background-size: 20px 20px; /* 这里的数值越小，点越密集 */
+  background-size: 20px 20px; 
 
   /* 3. 添加暗角 (Vignette) */
-  /* inset 表示内阴影，让四周变暗，突出中间的预览图 */
-  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 0 120px var(--workspace-shadow);
+  
+  /* 4. 主题切换过渡 */
+  transition: background-color 0.3s ease, background-image 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Light Mode Overrides for Workspace */
+:global([data-theme='light']) .workspace-body {
+  --workspace-bg: var(--bg-workspace); 
+  --workspace-dot: rgba(0, 0, 0, 0.05); 
+  --workspace-shadow: transparent; 
 }
 
 .workspace-header {
@@ -170,7 +183,7 @@ const stopResize = () => {
   justify-content: space-between;
   padding: 0 16px;
   background: transparent;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--border-color);
   position: relative;
   z-index: 100; /* 确保层级高于 resizer */
 }
@@ -183,15 +196,15 @@ const stopResize = () => {
 .tab { 
   padding: 4px 12px; 
   font-size: 0.85em; 
-  color: #888; 
+  color: var(--text-sub); 
   cursor: pointer; 
   transition: color 0.2s;
   user-select: none;
 }
-.tab:hover { color: #ccc; }
+.tab:hover { color: var(--text-main); }
 .tab.active { 
-  color: #fff; 
-  background: #333; 
+  color: var(--text-main); 
+  background: var(--input-bg); 
   border-radius: 6px; 
 }
 
@@ -204,7 +217,7 @@ const stopResize = () => {
 .icon-btn {
   background: transparent;
   border: none;
-  color: #666;
+  color: var(--text-sub);
   cursor: pointer;
   padding: 6px;
   border-radius: 4px;
@@ -216,18 +229,18 @@ const stopResize = () => {
 }
 
 .icon-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #eee;
+  background: var(--input-bg);
+  color: var(--text-main);
 }
 
 /* GitHub 按钮特有样式 */
 .icon-btn.github:hover {
-  color: #fff; 
+  color: var(--text-main); 
 }
 
 /* Reset 按钮特有样式 */
 .icon-btn.reset:hover {
-  color: #646cff;
+  color: var(--bright-blue, #646cff);
   transform: rotate(-30deg);
 }
 
@@ -246,13 +259,13 @@ const stopResize = () => {
 .resize-handle .handle-bar {
   width: 100%;
   height: 1px;
-  background: #333;
+  background: var(--border-color);
   transition: all 0.2s;
 }
 
 .resize-handle:hover .handle-bar {
   height: 3px;
-  background: #646cff;
+  background: var(--bright-blue, #646cff);
   width: 40px;
   border-radius: 2px;
 }

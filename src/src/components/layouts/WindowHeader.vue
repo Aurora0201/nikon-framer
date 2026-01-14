@@ -1,9 +1,14 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { store } from '../../store'; // 引入 store
 
 const appWindow = getCurrentWindow();
 const isMaximized = ref(false);
+
+// 获取当前主题图标
+const themeIcon = computed(() => store.theme === 'dark' ? '🌙' : '☀️');
+const toggleTheme = () => store.toggleTheme();
 
 const minimizeWindow = () => appWindow.minimize();
 const toggleMaximize = async () => {
@@ -55,7 +60,27 @@ onUnmounted(() => {
       <span class="app-name">Nikon Framer</span>
     </div>
 
-    <div class="spacer"></div>
+    <!-- 右侧功能区 (替代原来的 spacer) -->
+    <div class="right-controls">
+      <button class="theme-btn" @click="toggleTheme" :title="store.theme === 'dark' ? '切换到亮色模式' : '切换到暗色模式'">
+        <!-- Sun Icon -->
+        <svg v-if="store.theme === 'light'" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <!-- Moon Icon -->
+        <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+    </div>
 
   </header>
 </template>
@@ -72,6 +97,7 @@ onUnmounted(() => {
   padding: 0 16px; /* 两侧留白 */
   z-index: 9999;
   position: relative;
+  width: 100%;
 }
 
 /* --- 左侧红绿灯区域 --- */
@@ -136,8 +162,33 @@ onUnmounted(() => {
   opacity: 0.8;
 }
 
-.spacer {
+.right-controls {
   width: 70px; /* 与左侧 controls 等宽，保持平衡 */
-  pointer-events: none;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  -webkit-app-region: no-drag; /* 允许点击 */
+}
+
+.theme-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-sub); /* 跟随主题色 */
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.theme-btn:hover {
+  background: var(--input-bg);
+  color: var(--text-main);
+}
+
+.spacer {
+  display: none; /* Hide spacer if it exists to avoid duplication issues if I failed to replace it properly before */
 }
 </style>

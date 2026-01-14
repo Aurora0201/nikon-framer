@@ -23,9 +23,25 @@
   /* --- 🟢 核心设计变量 --- */
   --app-radius: 16px;
   
-  /* --- 品牌色 (保持不变) --- */
-  --nikon-yellow: #ffe100;
+  /* --- 🟡 品牌色系 (Nikon Yellow) --- */
+  --nikon-yellow: #ffe100;         /* 经典尼康黄 */
+  --nikon-yellow-hover: #ffd000;   /* 悬停加深 */
+  --nikon-yellow-dim: rgba(255, 225, 0, 0.15); /* 微光/背景色 */
   
+  /* --- 🌈 亮色系 (Bright Color System for Light Mode) --- */
+  --bright-blue: #007AFF;   /* iOS Blue */
+  --bright-green: #34C759;  /* Success Green */
+  --bright-orange: #FF9500; /* Warning Orange */
+
+  /* --- ⚫ 品牌黑/灰度色系 (Neutral Grays) --- */
+  --gray-900: #121212; 
+  --gray-850: #181818;
+  --gray-800: #1e1e1e;
+  --gray-700: #2a2a2a;
+  --gray-500: #555555;
+  --gray-400: #757575;
+  --gray-100: #f5f5f5;
+
   /* --- 🟢 新色系：现代深空灰 (Lighter & Premium) --- */
   /* 不再是纯黑，而是带有高级质感的深炭灰 */
   --bg-color: #1E1E20;       /* App 整体背景 (原来的 #121212) */
@@ -35,8 +51,22 @@
   --text-main: #ECECEC;      /* 主文字更白一点，增加对比度 */
   --text-sub: #A0A0A5;       /* 副文字带一点冷色调 */
   
-  --border-color: #38383E;   /* 边框稍微亮一点，更精致 */
-  --border-focus: #55555A;
+  --border-color: #505058;   /* 边框提亮，增强深色模式下的对比度 */
+  --border-focus: #555555;
+  
+  /* --- 🟢 区域背景色 (Panel Backgrounds) --- */
+  /* 增大深浅差异，确保视觉区分明显 */
+  --bg-resource:  rgba(255, 255, 255, 0.03); /* 层级 1: 侧边栏微亮叠层 */
+  --bg-preset:    rgba(0, 0, 0, 0.12);       /* 层级 2: 中间层微暗 */
+  --bg-workspace: transparent;                /* 层级 3: 工作区透出底色 */
+
+  /* --- 🟢 内部组件背景 (Inner Backgrounds) --- */
+  --inner-bg: rgba(0, 0, 0, 0.2); 
+  --card-bg:  rgba(255, 255, 255, 0.05); 
+
+  --panel-shadow: none;
+
+  --col-bg: transparent; 
 
   /* --- 状态颜色 (微调以适应新背景) --- */
   --status-ok-bg: rgba(102, 187, 106, 0.2);
@@ -59,21 +89,80 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* 🟢 Light Mode Overrides (浅色模式) */
+/* 使用 "Modern Clean" 分层色彩系统 */
+[data-theme='light'] {
+  /* ⚠️ 强制背景透明 */
+  background-color: transparent !important; 
+  border: none;
+  
+  /* --- 1. 基础层级 --- */
+  /* App 背景: 使用中性灰/System Gray，营造桌面感 */
+  --bg-color: #F5F5F7;       
+  
+  /* 面板背景: 纯白，作为主要内容的承载容器 */
+  --panel-bg: #FFFFFF;
+  
+  /* 侧边栏背景: 增加区分度，采用微弱的颜色区分 */
+  --bg-resource: #EDEEF3; 
+  --bg-preset:   #F5F6F9;
+  --bg-workspace: #FFFFFF;
+  
+  --inner-bg: rgba(0, 0, 0, 0.04);
+  --card-bg:  #FFFFFF;
+
+  /* --- 2. 交互元素 --- */
+  /* 输入框/列表/卡片背景: 浅灰，与白色面板形成层级反差 (Inset Look) */
+  --input-bg: #E3E3E8;
+  
+  /* --- 3. 边框与线条 --- */
+  /* ⚠️ 强化边框颜色，使其在浅色模式下清晰可见 */
+  --border-color: #C6C6CC;   
+  --border-focus: var(--bright-blue); 
+
+  /* 阴影质感 */
+  --panel-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+
+  /* --- 4. 文字排版 --- */
+  /* 主文字: 近似纯黑，确保极佳的可读性 */
+  --text-main: #1D1D1F;
+  /* 副文字: 中性灰，不偏色 */
+  --text-sub:  #86868B;
+  
+  /* --- 5. 品牌与状态 --- */
+  /* 尼康黄: 在白底上稍微加深一点点，保证可见性 */
+  --nikon-yellow: #F0C800; 
+  --nikon-yellow-hover: #DDB600;
+  /* 选中态: 非常淡的黄色背景 */
+  --nikon-yellow-dim: rgba(240, 200, 0, 0.12);
+
+  /* 状态色优化 */
+  --status-ok-bg: rgba(52, 199, 89, 0.12);
+  --status-ok-text: #008030; /* 更深一点的绿，提高对比度 */
+  --status-no-bg: rgba(255, 59, 48, 0.1);
+  --status-no-text: #D60000;
+  
+  --accent-secondary: var(--bright-blue);
+}
+
+
 /* 🟢 核心修改：背景透明化 */
 /* 必须设置为 transparent，否则圆角外部会有黑色背景块，无法透出桌面 */
-html, body, #app {
+html, body {
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
   overflow: hidden; /* 禁止原生滚动条 */
-  display: block;
-  
-  /* 关键：让 Tauri 窗口完全透明 */
-  /* 🟢 修复方案：强制背景完全透明 */
-  /* 使用 rgba(0,0,0,0) 比 transparent 兼容性有时更好，!important 确保不被浏览器默认样式覆盖 */
-  background-color: rgba(0, 0, 0, 0) !important; 
-  background: transparent !important;
+  background-color: transparent !important;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  /* 🟢 布局修正：通过 padding 给整个应用留出 2px 边距，避免 margin 导致的位移问题 */
+  padding: 2px;
+  background-color: transparent !important;
 }
 
 * { box-sizing: border-box; }

@@ -77,12 +77,11 @@ const {
   position: relative;
   border-radius: var(--app-radius);
   
-  background: var(--glass-bg, rgba(255, 255, 255, 0.015));
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--panel-bg); 
   
   /* 统一边框风格 */
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border-color);
+  box-shadow: var(--panel-shadow);
 
   user-select: none;
   overflow: hidden;
@@ -91,8 +90,8 @@ const {
 
 /* Light Mode Override for Container */
 :global([data-theme='light']) .status-lens-container {
-  background: rgba(255, 255, 255, 0.5);
-  border-color: rgba(0, 0, 0, 0.1);
+  background: #FFFFFF;
+  border-color: var(--border-color);
 }
 
 .status-content {
@@ -112,20 +111,25 @@ const {
    ========================================= */
 .status-left {
   display: flex; align-items: center; gap: 12px; flex: 1;
-  font-size: 0.9em; color: rgba(255, 255, 255, 0.75); font-weight: 500;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+  font-size: 0.9em; color: var(--text-sub); font-weight: 500;
+  /* Remove harsh text shadow */
+  /* text-shadow: 0 1px 2px rgba(0,0,0,0.9); */
+}
+:global([data-theme='light']) .status-left {
+  text-shadow: none;
+  color: var(--text-main);
 }
 .indicator-wrapper { position: relative; width: 8px; height: 8px; display: flex; align-items: center; justify-content: center; }
-.indicator { width: 8px; height: 8px; border-radius: 50%; background-color: #555; transition: all 0.3s; z-index: 2; box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+.indicator { width: 8px; height: 8px; border-radius: 50%; background-color: var(--gray-500); transition: all 0.3s; z-index: 2; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
 .indicator-glow { position: absolute; width: 100%; height: 100%; border-radius: 50%; opacity: 0; transition: all 0.3s; z-index: 1; filter: blur(2px); }
 
-.indicator.normal { background-color: rgba(255, 255, 255, 0.3); }
-.indicator.success { background-color: #4caf50; }
-.indicator-glow.success { background-color: #4caf50; opacity: 0.6; }
+.indicator.normal { background-color: var(--text-sub); }
+.indicator.success { background-color: var(--status-ok-text); }
+.indicator-glow.success { background-color: var(--status-ok-text); opacity: 0.6; }
 .indicator.loading { background-color: var(--nikon-yellow); }
 .indicator-glow.loading { background-color: var(--nikon-yellow); opacity: 0.8; animation: pulse-light 1s infinite; }
-.indicator.error { background-color: #ff5252; }
-.indicator-glow.error { background-color: #ff5252; opacity: 0.6; }
+.indicator.error { background-color: var(--status-no-text); }
+.indicator-glow.error { background-color: var(--status-no-text); opacity: 0.6; }
 @keyframes pulse-light { 0% { opacity: 0.4; transform: scale(1); } 100% { opacity: 0; transform: scale(2.5); } }
 .text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.5px; }
 
@@ -136,12 +140,8 @@ const {
 .progress-box { width: 100%; max-width: 420px; display: flex; align-items: center; gap: 16px; }
 
 .progress-track {
-  flex: 1; height: 6px; background: rgba(0, 0, 0, 0.5); border-radius: 3px; overflow: hidden;
-  box-shadow: inset 0 1px 3px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.05); position: relative;
-}
-:global([data-theme='light']) .progress-track {
-  background: rgba(0, 0, 0, 0.1);
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+  flex: 1; height: 6px; background: var(--input-bg); border-radius: 3px; overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.2); position: relative;
 }
 
 .progress-fill {
@@ -161,7 +161,7 @@ const {
   background-size: 20px 20px;
   animation: progress-stripes 1s linear infinite;
   
-  transition: width 0.2s linear; position: relative; box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  transition: width 0.2s linear; position: relative; box-shadow: 0 0 10px var(--nikon-yellow-dim);
 }
 
 @keyframes progress-stripes {
@@ -174,16 +174,13 @@ const {
 .progress-num {
   font-family: 'Inter Display', sans-serif; font-variant-numeric: tabular-nums; font-size: 0.85em;
   color: var(--text-sub); min-width: 120px; text-align: right; display: flex; justify-content: flex-end; gap: 4px;
-  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
 }
 :global([data-theme='light']) .progress-num {
   text-shadow: none;
 }
-.num-current { color: #fff; font-weight: 600; }
-:global([data-theme='light']) .num-current { color: var(--text-main); }
+.num-current { color: var(--text-main); font-weight: 600; }
 .num-divider { opacity: 0.4; }
 .num-percent { color: var(--nikon-yellow); margin-left: 6px; font-weight: 600; }
-:global([data-theme='light']) .num-percent { color: #d4bb00; }
 
 /* =========================================
    4. 右侧按钮 (Buttons) - 修正版
@@ -205,45 +202,30 @@ const {
   user-select: none;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
 /* --- single-mode (次要按钮) --- */
 .nikon-btn.single-mode {
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-:global([data-theme='light']) .nikon-btn.single-mode {
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--text-main);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: none;
+  background: var(--input-bg);
+  color: var(--text-sub);
+  border: 1px solid var(--border-color);
 }
 
 .nikon-btn.single-mode:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.3);
-}
-:global([data-theme='light']) .nikon-btn.single-mode:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.1);
-  border-color: rgba(0, 0, 0, 0.2);
+  background: var(--border-color); /* Slightly lighter/different than input-bg */
+  color: var(--text-main);
+  border-color: var(--border-focus);
 }
 
 /* --- batch-mode (主按钮) --- */
 .nikon-btn.batch-mode {
   /* 恢复明亮的黄色 */
   background: var(--nikon-yellow);
-  color: #111; /* 黑字确保对比度 */
+  color: #111; /* 黑字确保对比度，Yellow on Black is classic Nikon */
   border: none;
   font-weight: 800;
-  box-shadow: 0 4px 12px rgba(255, 215, 0, 0.3);
-}
-:global([data-theme='light']) .nikon-btn.batch-mode {
-  /* 浅色模式下稍微深一点的黄，避免刺眼，但保持活力 */
-  background: #FFD600; 
-  box-shadow: 0 4px 10px rgba(255, 200, 0, 0.25);
+  box-shadow: 0 4px 12px var(--nikon-yellow-dim);
 }
 
 .nikon-btn.batch-mode:hover:not(:disabled) {
@@ -254,7 +236,7 @@ const {
 .nikon-btn.batch-mode:active:not(:disabled) {
   transform: translateY(1px);
   filter: brightness(0.95);
-  box-shadow: 0 2px 5px rgba(255, 215, 0, 0.2);
+  box-shadow: 0 2px 5px var(--nikon-yellow-dim);
 }
 
 /* --- 禁用态 --- */
@@ -269,10 +251,10 @@ const {
 
 /* --- 停止按钮 (高优先级覆盖) --- */
 .nikon-btn.can-stop {
-  background: linear-gradient(180deg, #ff5252, #d32f2f) !important;
+  background: var(--status-no-text) !important;
   color: white !important;
   border: none !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 4px rgba(0,0,0,0.4) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 4px rgba(0,0,0,0.2) !important;
   animation: pulse-red-btn 2s infinite;
 }
 .nikon-btn.can-stop:hover { filter: brightness(1.1); }

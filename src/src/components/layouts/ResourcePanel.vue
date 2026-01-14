@@ -143,27 +143,27 @@ const clearAll = () => store.clearQueue();
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 12px; 
   background: transparent; 
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border-color);
   font-weight: 600; font-size: 0.9em; 
-  color: rgba(255, 255, 255, 0.85); 
+  color: var(--text-main); 
   flex-shrink: 0;
 }
 
 .header-actions { display: flex; gap: 8px; }
 
 .icon-btn-mini {
-  background: rgba(255, 255, 255, 0.05); 
-  border: 1px solid rgba(255, 255, 255, 0.1); 
-  color: rgba(255, 255, 255, 0.7); 
+  background: var(--input-bg); 
+  border: 1px solid var(--border-color); 
+  color: var(--text-sub); 
   width: 26px; height: 26px;
   border-radius: 6px; cursor: pointer; 
   display: flex; align-items: center; justify-content: center; font-size: 14px;
   transition: all 0.2s;
 }
 .icon-btn-mini:hover { 
-  background: rgba(255, 255, 255, 0.15); 
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #fff;
+  background: var(--bg-color); /* Slightly different on hover */
+  border-color: var(--text-sub);
+  color: var(--text-main);
 }
 
 /* =========================================
@@ -177,7 +177,7 @@ const clearAll = () => store.clearQueue();
 .section { display: flex; flex-direction: column; }
 .section-title {
   display: block; font-size: 0.75em; 
-  color: rgba(255, 255, 255, 0.5); 
+  color: var(--text-sub); 
   margin-bottom: 8px; 
   text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;
 }
@@ -188,27 +188,26 @@ const clearAll = () => store.clearQueue();
 .mode-select {
   width: 100%;
   
-  /* 🟢 修改：不再用 0.6 的黑，改用 lighter 的深空灰，更融合 */
-  background-color: rgba(30, 30, 35, 0.4); 
-  color: rgba(255, 255, 255, 0.95);
+  background-color: var(--input-bg); 
+  color: var(--text-main);
   
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
   
   padding: 8px 10px; border-radius: 6px; outline: none; font-size: 0.9em; cursor: pointer;
   appearance: none; -webkit-appearance: none;
   
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  /* Use a generic svg icon or encoded one that works on dark/light */
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
   background-repeat: no-repeat; background-position: right 10px center; background-size: 16px; padding-right: 35px;
   
   transition: all 0.2s;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.2); 
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.05); 
 }
 .mode-select:focus { 
-  border-color: rgba(255, 255, 255, 0.3); 
-  background-color: rgba(30, 30, 35, 0.6); 
+  border-color: var(--border-focus); 
 }
-.mode-select:hover { border-color: rgba(255, 255, 255, 0.2); background-color: rgba(255, 255, 255, 0.1); }
-.mode-select option { background-color: #252528; color: #eee; }
+.mode-select:hover { border-color: var(--text-sub); }
+.mode-select option { background-color: var(--input-bg); color: var(--text-main); }
 
 /* =========================================
    4. 列表视口 (Viewport) - 调亮底色
@@ -216,18 +215,17 @@ const clearAll = () => store.clearQueue();
 .file-list-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 .list-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.clear-btn { background: none; border: none; color: rgba(255, 255, 255, 0.4); font-size: 0.75em; cursor: pointer; padding: 0; }
-.clear-btn:hover { color: #d44; text-decoration: underline; }
+.clear-btn { background: none; border: none; color: var(--text-sub); font-size: 0.75em; cursor: pointer; padding: 0; }
+.clear-btn:hover { color: var(--status-no-text); text-decoration: underline; }
 
 .list-viewport {
   flex: 1; position: relative; overflow: hidden; display: flex;
   
-  /* 🟢 修改：从 0.5 降到 0.25，去除“黑洞感” */
-  background: rgba(0, 0, 0, 0.25); 
+  background: var(--inner-bg); 
   
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
   /* 仅保留微弱的内阴影 */
-  box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
   
   border-radius: 6px;
 }
@@ -239,26 +237,21 @@ const clearAll = () => store.clearQueue();
    ========================================= */
 .file-item {
   padding: 8px 10px; height: 64px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--border-color);
   display: flex; align-items: center; justify-content: space-between;
   transition: background 0.2s;
   position: relative; /* 为伪元素定位 */
 }
 
-/* 悬停：微弱的白光 */
-.file-item:hover { background: rgba(255, 255, 255, 0.03); }
+/* 悬停 */
+.file-item:hover { background: var(--nikon-yellow-dim); }
 
-/* 🟢 选中状态：流光渐变 (The Golden Glow) */
+/* 🟢 选中状态 */
 .file-item.active {
-  /* 不再是实心色块，而是从左侧黄色发出的渐变光 */
-  background: linear-gradient(90deg, rgba(255, 215, 0, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
-  
-  /* 左侧指示条保持 */
+  background: linear-gradient(90deg, var(--nikon-yellow-dim) 0%, transparent 100%);
   border-left: 3px solid var(--nikon-yellow);
   padding-left: 7px;
-  
-  /* 上下加一条极细的高光线，增加精致感 */
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .item-left { display: flex; align-items: center; overflow: hidden; gap: 12px; flex: 1; }
@@ -266,17 +259,16 @@ const clearAll = () => store.clearQueue();
 .list-thumb { 
   margin-right: 0; flex-shrink: 0; 
   border-radius: 2px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   opacity: 0.9;
 }
 
-/* 序号标签 - 玻璃化 */
+/* 序号标签 */
 .file-index {
   font-family: inherit; font-size: 0.7em; font-weight: 700;
   
-  /* 🟢 修改：未选中时是半透明玻璃 */
-  color: rgba(255, 255, 255, 0.5); 
-  background: rgba(255, 255, 255, 0.1); 
+  color: var(--text-sub); 
+  background: rgba(125, 125, 125, 0.1); 
   
   width: 18px; height: 18px; border-radius: 4px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1;
@@ -285,8 +277,8 @@ const clearAll = () => store.clearQueue();
 /* 选中时：实心黄，文字变黑 */
 .file-item.active .file-index { 
   background: var(--nikon-yellow); 
-  color: #111; 
-  box-shadow: 0 0 8px rgba(255, 215, 0, 0.4); /* 序号发光 */
+  color: #121212; 
+  box-shadow: 0 0 8px rgba(255, 215, 0, 0.4); 
 }
 
 .name-col { display: flex; flex-direction: column; gap: 4px; overflow: hidden; justify-content: center; }
@@ -294,48 +286,39 @@ const clearAll = () => store.clearQueue();
 
 .file-name {
   font-size: 0.9em; font-weight: 500;
-  color: rgba(255, 255, 255, 0.75); 
+  color: var(--text-main); 
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;
 }
 /* 选中文字高亮 */
-.file-item.active .file-name { color: #fff; text-shadow: 0 0 5px rgba(0,0,0,0.5); font-weight: 600; }
+.file-item.active .file-name { color: var(--text-main); font-weight: 600; text-shadow: none; }
 
-/* EXIF 徽章 - 保持鲜艳 */
+/* EXIF 徽章 */
 .exif-badge {
   font-size: 9px; padding: 1px 5px; border-radius: 3px;
-  background: rgba(255, 255, 255, 0.1); 
-  color: rgba(255, 255, 255, 0.6); 
+  background: rgba(125, 125, 125, 0.1); 
+  color: var(--text-sub); 
   width: fit-content; font-weight: 600; letter-spacing: 0.3px;
 }
 .exif-badge.ok { 
-  background: rgba(102, 187, 106, 0.2); 
-  color: #28a52e; 
+  background: var(--status-ok-bg); 
+  color: var(--status-ok-text); 
 }
 .exif-badge.no { 
-  background: rgba(229, 115, 115, 0.2); 
-  color: #e64f4f; 
+  background: var(--status-no-bg); 
+  color: var(--status-no-text); 
 }
 .exif-badge.scanning { color: var(--nikon-yellow); background: rgba(255, 215, 0, 0.1); }
 
 .del-btn {
-  background: none; border: none; color: rgba(255, 255, 255, 0.3); 
+  background: none; border: none; color: var(--text-sub); 
   cursor: pointer; font-size: 1.4em; line-height: 1; padding: 0 5px; margin-left: 5px;
   transition: color 0.2s;
 }
-.del-btn:hover { color: #ff5252; }
+.del-btn:hover { color: var(--status-no-text); }
 
 .empty-tip {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center; color: rgba(255, 255, 255, 0.25); 
+  text-align: center; color: var(--text-sub); 
   font-size: 0.85em; min-height: 150px; user-select: none;
 }
-
-.drag-overlay {
-  position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 99;
-  background-color: rgba(20, 20, 20, 0.85); 
-  border: 2px dashed var(--nikon-yellow); 
-  backdrop-filter: blur(4px); 
-  display: flex; align-items: center; justify-content: center; pointer-events: none;
-}
-.overlay-content { color: var(--nikon-yellow); font-weight: bold; font-size: 1.1em; display: flex; flex-direction: column; align-items: center; gap: 10px; text-transform: uppercase; letter-spacing: 1px; }
 </style>
